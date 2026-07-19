@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Invoice } from '../types';
-import { InvoiceTemplate } from '../lib/settings';
+import { InvoiceTemplate, getCurrencySymbol } from '../lib/settings';
 import { Search, Eye, Edit2, CheckCircle, Trash2, Printer, FileText, Mail, Calendar, User, Phone, MapPin, X, Plus } from 'lucide-react';
 
 interface InvoiceListProps {
@@ -16,6 +16,9 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [visibleCount, setVisibleCount] = useState<number>(50);
+
+  // Get currency symbol from template settings
+  const currencySymbol = getCurrencySymbol(template?.currency || 'USD');
 
   // Reset visible count when search or filter changes
   useEffect(() => {
@@ -217,17 +220,17 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
 
                       {/* Total */}
                       <td className="py-4 px-5 text-right font-bold text-slate-800 text-sm">
-                        ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencySymbol}{inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       {/* Paid */}
                       <td className="py-4 px-5 text-right text-emerald-600 font-medium text-sm">
-                        ${inv.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencySymbol}{inv.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       {/* Balance */}
                       <td className="py-4 px-5 text-right text-red-600 font-bold text-sm">
-                        ${inv.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencySymbol}{inv.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
 
                       {/* Status */}
@@ -459,10 +462,10 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
                           <td className="py-3 px-4 text-center border-r border-slate-200 font-mono text-xs">{item.checkOut || '-'}</td>
                           <td className="py-3 px-4 text-center border-r border-slate-200 font-medium">{item.nights}</td>
                           <td className="py-3 px-4 text-right border-r border-slate-200 font-mono">
-                            ${item.price.toFixed(2)}
+                            {currencySymbol}{item.price.toFixed(2)}
                           </td>
                           <td className="py-3 px-4 text-right font-bold text-slate-900 font-mono">
-                            ${item.total.toFixed(2)}
+                            {currencySymbol}{item.total.toFixed(2)}
                           </td>
                         </tr>
                       ))
@@ -477,7 +480,7 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
                           <td className="py-2 px-4 border-r border-slate-200"></td>
                           <td className="py-2 px-4 border-r border-slate-200 text-center text-xs text-slate-300 font-mono">0</td>
                           <td className="py-2 px-4 border-r border-slate-200"></td>
-                          <td className="py-2 px-4 text-right text-xs text-slate-300 font-mono">$0.00</td>
+                          <td className="py-2 px-4 text-right text-xs text-slate-300 font-mono">{currencySymbol}0.00</td>
                         </tr>
                       ))
                     }
@@ -512,7 +515,7 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
                   <div className="flex justify-between items-center text-sm font-semibold text-slate-600">
                     <span>Total Amount:</span>
                     <span className="text-xl font-extrabold text-slate-900 font-mono">
-                      ${selectedInvoice.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {currencySymbol}{selectedInvoice.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
 
@@ -520,7 +523,7 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
                     <span className="font-medium">Amount Paid:</span>
                     <div className="text-right">
                       <span className="text-base font-bold text-emerald-600 font-mono">
-                        ${selectedInvoice.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {currencySymbol}{selectedInvoice.amountPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                       <div className="text-[10px] text-slate-400 mt-0.5">Date: {selectedInvoice.paymentDate || selectedInvoice.date}</div>
                     </div>
@@ -533,8 +536,8 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
                     </span>
                     <span className="text-xl font-black tracking-widest font-mono">
                       {selectedInvoice.balance < 0
-                        ? `-$${Math.abs(selectedInvoice.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : `$${selectedInvoice.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        ? `-${currencySymbol}${Math.abs(selectedInvoice.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : `${currencySymbol}${selectedInvoice.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </span>
                   </div>
                 </div>
