@@ -123,6 +123,7 @@ export async function deleteCashExpense(id: number): Promise<void> {
 }
 
 // Group ledger data by date
+// Cash-tagged entries are added to totalReceived, expense-tagged entries are added to totalExpense
 export function groupLedgerByDate(invoices: LedgerInvoice[], expenses: CashExpense[]): LedgerEntry[] {
   const dateMap = new Map<string, LedgerEntry>();
 
@@ -138,6 +139,8 @@ export function groupLedgerByDate(invoices: LedgerInvoice[], expenses: CashExpen
   });
 
   // Group expenses by date
+  // If tag is "cash", it counts as received (added to totalReceived)
+  // If tag is "expense", it counts as expense (added to totalExpense / deducted)
   expenses.forEach((exp) => {
     const date = new Date(exp.created_at).toISOString().split("T")[0];
     if (!dateMap.has(date)) {
@@ -145,7 +148,11 @@ export function groupLedgerByDate(invoices: LedgerInvoice[], expenses: CashExpen
     }
     const entry = dateMap.get(date)!;
     entry.expenses.push(exp);
-    entry.totalExpense += exp.amount;
+    if (exp.tag === "cash") {
+      entry.totalReceived += exp.amount;
+    } else {
+      entry.totalExpense += exp.amount;
+    }
   });
 
   // Sort by date descending
