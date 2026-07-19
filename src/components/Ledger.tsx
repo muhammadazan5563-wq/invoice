@@ -79,12 +79,31 @@ export default function Ledger() {
     }
   };
 
-  const handleOpenCreatePanel = async () => {
+  const handleOpenCreatePanel = async (editDate?: string) => {
+    const dateToUse = editDate || selectedDate;
     setViewMode('create');
     setShowExpenseForm(false);
-    setExpenseEntries([]);
     setError(null);
-    await fetchInvoicesForDate(selectedDate);
+
+    // Load existing expenses for this date from the database
+    // so they appear in the edit panel (not just in the report view)
+    const existingEntry = ledgerEntries.find((e) => e.date === dateToUse);
+    if (existingEntry && existingEntry.expenses.length > 0) {
+      // Pre-populate the expense entries from the saved data
+      setExpenseEntries(
+        existingEntry.expenses.map((exp) => ({
+          name: exp.name,
+          amount: String(exp.amount),
+          description: exp.description || '',
+          tag: exp.tag || 'expense',
+        }))
+      );
+      setShowExpenseForm(true);
+    } else {
+      setExpenseEntries([]);
+    }
+
+    await fetchInvoicesForDate(dateToUse);
   };
 
   const fetchInvoicesForDate = async (date: string) => {
@@ -175,6 +194,15 @@ export default function Ledger() {
       }
 
       // Save expense entries
+      // First, delete existing expenses for this date to avoid duplicates when editing
+      const existingEntry = ledgerEntries.find((e) => e.date === selectedDate);
+      if (existingEntry && existingEntry.expenses.length > 0) {
+        for (const exp of existingEntry.expenses) {
+          await deleteCashExpense(exp.id);
+        }
+      }
+
+      // Then save all expense entries (both pre-existing and newly added)
       for (const exp of expenseEntries) {
         await createCashExpense({
           name: exp.name,
@@ -894,7 +922,7 @@ export default function Ledger() {
                         <button
                           onClick={() => {
                             setSelectedDate(entry.date);
-                            handleOpenCreatePanel();
+                            handleOpenCreatePanel(entry.date);
                           }}
                           className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold px-3 py-2 rounded-lg transition-all cursor-pointer"
                           title="Edit Entry"
