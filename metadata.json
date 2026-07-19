@@ -1,6 +1,6 @@
 {
   "name": "Remix: SheetInvoice React",
-  "description": "A modern React-based interface for capturing invoice data and storing it directly into Google Sheets as a backend.",
+  "description": "A unified invoice ledger supporting both Google Sheets and Supabase Database backends, optimized for serverless hosting on Vercel.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
