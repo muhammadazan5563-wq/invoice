@@ -47,10 +47,11 @@ export default function Ledger() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todayInvoices, setTodayInvoices] = useState<Invoice[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [expenseEntries, setExpenseEntries] = useState<{ name: string; amount: string; description: string }[]>([]);
+  const [expenseEntries, setExpenseEntries] = useState<{ name: string; amount: string; description: string; tag: string }[]>([]);
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [newExpenseDescription, setNewExpenseDescription] = useState('');
+  const [newExpenseTag, setNewExpenseTag] = useState<string>('expense');
   const [saving, setSaving] = useState(false);
 
   // Delete confirmation
@@ -117,11 +118,12 @@ export default function Ledger() {
     if (!newExpenseName.trim() || !newExpenseAmount.trim()) return;
     setExpenseEntries([
       ...expenseEntries,
-      { name: newExpenseName.trim(), amount: newExpenseAmount.trim(), description: newExpenseDescription.trim() },
+      { name: newExpenseName.trim(), amount: newExpenseAmount.trim(), description: newExpenseDescription.trim(), tag: newExpenseTag },
     ]);
     setNewExpenseName('');
     setNewExpenseAmount('');
     setNewExpenseDescription('');
+    setNewExpenseTag('expense');
   };
 
   const handleRemoveExpenseEntry = (index: number) => {
@@ -138,18 +140,15 @@ export default function Ledger() {
       // Save invoices as ledger_invoices (skip duplicates)
       for (const inv of todayInvoices) {
         // Check if this invoice ID already exists in ledger
-        const alreadyExists = allInvoices.some(
-          (existing) => existing.guest_name === inv.customerName && 
-                        existing.hotel_name === (inv.hotelName || '') && 
-                        existing.total_amount === inv.totalAmount
-        );
-        if (!alreadyExists) {
-          await createLedgerInvoice({
-            guest_name: inv.customerName,
-            hotel_name: inv.hotelName || '',
-            total_amount: inv.totalAmount,
-          });
+        if (existingIds.has(String(inv.id))) {
+          continue; // Skip duplicate
         }
+        await createLedgerInvoice({
+          id: inv.id,
+          guest_name: inv.customerName,
+          hotel_name: inv.hotelName || '',
+          total_amount: inv.totalAmount,
+        });
       }
 
       // Save expense entries
@@ -158,6 +157,7 @@ export default function Ledger() {
           name: exp.name,
           amount: Number(exp.amount) || 0,
           description: exp.description,
+          tag: exp.tag || 'expense',
         });
       }
 
@@ -353,7 +353,7 @@ export default function Ledger() {
             {/* Add Expense Form */}
             {showExpenseForm && (
               <div className="bg-slate-50 rounded-2xl p-6 mb-4 border border-slate-200">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                   <div>
                     <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">Name *</label>
                     <input
@@ -373,6 +373,17 @@ export default function Ledger() {
                       onChange={(e) => setNewExpenseAmount(e.target.value)}
                       className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
                     />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">Tag *</label>
+                    <select
+                      value={newExpenseTag}
+                      onChange={(e) => setNewExpenseTag(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="expense">Expense</option>
+                    </select>
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">Description</label>
@@ -404,6 +415,7 @@ export default function Ledger() {
                     <tr className="bg-slate-50 border-b border-slate-200">
                       <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
                       <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Tag</th>
                       <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
                       <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-20">Remove</th>
                     </tr>
@@ -414,6 +426,11 @@ export default function Ledger() {
                         <td className="py-4 px-6 text-sm font-semibold text-slate-800">{entry.name}</td>
                         <td className="py-4 px-6 text-right">
                           <span className="text-sm font-bold text-rose-700">${Number(entry.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${entry.tag === 'cash' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                            {entry.tag === 'cash' ? 'Cash' : 'Expense'}
+                          </span>
                         </td>
                         <td className="py-4 px-6 text-sm text-slate-500">{entry.description || '—'}</td>
                         <td className="py-4 px-6 text-center">
@@ -605,6 +622,7 @@ export default function Ledger() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Tag</th>
                   <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
                   <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
                   <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-20">Action</th>
@@ -614,6 +632,11 @@ export default function Ledger() {
                 {selectedEntry.expenses.map((exp) => (
                   <tr key={exp.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3.5 px-6 text-sm font-semibold text-slate-700">{exp.name}</td>
+                    <td className="py-3.5 px-6 text-center">
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${exp.tag === 'cash' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {exp.tag === 'cash' ? 'Cash' : 'Expense'}
+                      </span>
+                    </td>
                     <td className="py-3.5 px-6 text-sm text-slate-500">{exp.description || '—'}</td>
                     <td className="py-3.5 px-6 text-sm font-bold text-rose-700 text-right">
                       -${exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
