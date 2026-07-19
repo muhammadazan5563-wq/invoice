@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Invoice } from '../types';
+import { InvoiceTemplate } from '../lib/settings';
 import { Search, Eye, Edit2, CheckCircle, Trash2, Printer, FileText, Mail, Calendar, User, Phone, MapPin, X, Plus } from 'lucide-react';
 
 interface InvoiceListProps {
@@ -7,9 +8,10 @@ interface InvoiceListProps {
   onEdit: (invoice: Invoice) => void;
   onDelete: (invoice: Invoice) => Promise<void>;
   onMarkAsPaid: (invoice: Invoice) => Promise<void>;
+  template?: InvoiceTemplate | null;
 }
 
-export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid }: InvoiceListProps) {
+export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, template }: InvoiceListProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -61,7 +63,7 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid }
         <!DOCTYPE html>
         <html>
           <head>
-            <title>FAIZ GROUP - Invoice #${selectedInvoice?.id}</title>
+            <title>${template?.companyName || 'FAIZ GROUP'} - Invoice #${selectedInvoice?.id}</title>
             <meta charset="utf-8">
             <script src="https://cdn.tailwindcss.com"></script>
             <style>
@@ -334,12 +336,16 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid }
                 <div>
                   {/* Blue Logo Block Accent */}
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-10 bg-blue-600 rounded-sm flex items-center justify-center text-white font-black text-xl tracking-tighter">
-                      FG
-                    </div>
+                    {template?.companyLogo ? (
+                      <img src={template.companyLogo} alt="Logo" className="w-12 h-10 object-contain rounded-sm" />
+                    ) : (
+                      <div className="w-12 h-10 bg-blue-600 rounded-sm flex items-center justify-center text-white font-black text-xl tracking-tighter">
+                        {(template?.companyName || 'FG').slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     <div>
                       <h1 className="text-3xl font-black italic tracking-wide text-slate-900 uppercase font-display">
-                        FAIZ GROUP
+                        {template?.companyName || 'FAIZ GROUP'}
                       </h1>
                       <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest">
                         Luxury Hotel & Suites
@@ -487,18 +493,16 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid }
                   {/* Terms & Conditions */}
                   <div className="text-xs text-slate-500">
                     <span className="font-bold uppercase tracking-wider text-slate-700 block mb-1">Terms & Conditions:</span>
-                    <p className="leading-relaxed font-medium">
-                      Any delay in payment will be subjected to a late payment fee. Thank you for your residency.
+                    <p className="leading-relaxed font-medium whitespace-pre-line">
+                      {template?.termsAndConditions || 'Any delay in payment will be subjected to a late payment fee. Thank you for your residency.'}
                     </p>
                   </div>
 
                   {/* Payment Info */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-1.5">
                     <span className="font-bold uppercase tracking-wider text-slate-800 block mb-1">Payment Information:</span>
-                    <p className="font-semibold text-slate-700">Beneficiaire Bank of America</p>
-                    <p className="font-semibold text-slate-700">Swift Sort</p>
-                    <p className="font-mono text-slate-800 text-[13px] bg-slate-100/80 px-2 py-1 rounded w-fit">
-                      Account No.: 324 6654 7766 9992
+                    <p className="font-semibold text-slate-700 whitespace-pre-line">
+                      {template?.paymentDetails || 'Beneficiaire Bank of America\nSwift Sort\nAccount No.: 324 6654 7766 9992'}
                     </p>
                   </div>
                 </div>
