@@ -25,18 +25,9 @@ import {
   AlertCircle,
   Clock,
   DollarSign,
+  CloudLightning,
   Settings as SettingsIcon,
-  Receipt,
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
-  CreditCard,
-  Send,
-  Download,
-  MoreHorizontal,
-  Search,
-  Bell,
-  ChevronRight
+  TrendingUp
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -45,12 +36,55 @@ interface DashboardProps {
   onLogout: () => Promise<void>;
 }
 
+// Deterministic avatar color per customer name, so the same guest always
+// gets the same chip color across sessions (not random, not repeated blue).
+const AVATAR_PALETTE = [
+  { bg: 'bg-indigo-100', text: 'text-indigo-700' },
+  { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  { bg: 'bg-amber-100', text: 'text-amber-700' },
+  { bg: 'bg-rose-100', text: 'text-rose-700' },
+  { bg: 'bg-sky-100', text: 'text-sky-700' },
+  { bg: 'bg-violet-100', text: 'text-violet-700' },
+];
+
+function avatarFor(name: string) {
+  const clean = (name || '?').trim();
+  const initials = clean
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || '')
+    .join('') || '?';
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
+  const palette = AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+  return { initials, ...palette };
+}
+
+const STATUS_STYLE: Record<Invoice['status'], { chipBg: string; chipText: string; amountText: string; dot: string }> = {
+  Paid: { chipBg: 'bg-emerald-50', chipText: 'text-emerald-600', amountText: 'text-emerald-600', dot: '#10b981' },
+  Due: { chipBg: 'bg-amber-50', chipText: 'text-amber-600', amountText: 'text-amber-600', dot: '#f59e0b' },
+  Pending: { chipBg: 'bg-amber-50', chipText: 'text-amber-600', amountText: 'text-amber-600', dot: '#f59e0b' },
+  Unpaid: { chipBg: 'bg-rose-50', chipText: 'text-rose-600', amountText: 'text-rose-600', dot: '#f43f5e' },
+  Overdue: { chipBg: 'bg-violet-50', chipText: 'text-violet-600', amountText: 'text-violet-600', dot: '#8b5cf6' },
+};
+
+// Splits a currency total into integer + 2dp fraction, comma-formatted, so the
+// big hero number and its trailing decimal always agree with each other.
+function splitCurrency(value: number) {
+  const fixed = value.toFixed(2);
+  const [whole, frac] = fixed.split('.');
+  const formattedWhole = Number(whole).toLocaleString('en-US');
+  return { whole: formattedWhole, frac };
+}
+
 export default function Dashboard({ user, token, onLogout }: DashboardProps) {
+  // Invoices data states
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
 
+  // Template settings loaded from Supabase
   const [invoiceTemplate, setInvoiceTemplate] = useState<InvoiceTemplate | null>(null);
 
   const supabaseSqlSchema = `-- 1. Create the invoices table in Supabase
@@ -97,9 +131,11 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     setTimeout(() => setCopiedSql(false), 2000);
   };
 
+  // View state: 'dashboard' | 'create' | 'edit' | 'settings'
   const [viewState, setViewState] = useState<'dashboard' | 'create' | 'edit' | 'settings'>('dashboard');
   const [editingInvoice, setEditingInvoice] = useState<Invoice | undefined>(undefined);
 
+  // Custom Confirmation Modal state to bypass iframe window.confirm blockages
   const [confirmModal, setConfirmModal] = useState<{
     title: string;
     message: string;
@@ -108,6 +144,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     onConfirm: () => void;
   } | null>(null);
 
+  // Load invoices and template settings on mount
   useEffect(() => {
     fetchInvoices();
     loadTemplateSettings();
@@ -137,6 +174,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     }
   };
 
+  // Save new or edited invoice back to Supabase
   const handleSaveInvoice = async (invoiceData: Omit<Invoice, 'rowIndex' | 'rawRow'> & { rowIndex?: number }) => {
     const performSave = async () => {
       setLoadingInvoices(true);
@@ -162,7 +200,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         title: 'Confirm Booking Update',
         message: `Are you sure you want to save your changes to invoice #${invoiceData.id}? This will synchronize directly with Supabase.`,
         actionLabel: 'Update Booking',
-        actionStyle: 'bg-blue-500 hover:bg-blue-600 focus:ring-blue-400',
+        actionStyle: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500',
         onConfirm: () => {
           performSave();
           setConfirmModal(null);
@@ -173,6 +211,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     }
   };
 
+  // Mark invoice as Paid (Quick action)
   const handleMarkAsPaid = async (invoice: Invoice) => {
     const performMark = async () => {
       const updatedInvoice: Omit<Invoice, 'rowIndex' | 'rawRow'> = {
@@ -206,7 +245,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
       title: 'Mark as Paid',
       message: `Are you sure you want to mark invoice #${invoice.id} as fully PAID? This will update the status and record the full payment in Supabase.`,
       actionLabel: 'Yes, Mark Paid',
-      actionStyle: 'bg-emerald-500 hover:bg-emerald-600 focus:ring-emerald-400',
+      actionStyle: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500',
       onConfirm: () => {
         performMark();
         setConfirmModal(null);
@@ -214,6 +253,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     });
   };
 
+  // Delete invoice
   const handleDeleteInvoice = async (invoice: Invoice) => {
     const performDelete = async () => {
       setLoadingInvoices(true);
@@ -231,7 +271,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
       title: 'Delete Invoice',
       message: `Are you sure you want to permanently delete invoice #${invoice.id} from your Supabase database? This action cannot be undone.`,
       actionLabel: 'Delete Permanently',
-      actionStyle: 'bg-rose-500 hover:bg-rose-600 focus:ring-rose-400',
+      actionStyle: 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-500',
       onConfirm: () => {
         performDelete();
         setConfirmModal(null);
@@ -239,7 +279,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     });
   };
 
-  // Calculate KPIs
+  // Calculate high-level KPIs
   const calculateKPIs = () => {
     let totalRevenue = 0;
     let totalPaid = 0;
@@ -247,6 +287,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     let overdueCount = 0;
 
     invoices.forEach((inv) => {
+      // Skip archived if any status is soft-archived
       if (inv.status === ('Archived' as any)) return;
       totalRevenue += inv.totalAmount;
       totalPaid += inv.amountPaid;
@@ -260,492 +301,257 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
   };
 
   const { totalRevenue, totalPaid, totalPending, overdueCount } = calculateKPIs();
+  const revenueSplit = splitCurrency(totalRevenue);
 
+  // Collection health: what % of billed revenue has actually been collected.
+  // Drives the gauge in the "Collection Health" card, and its color band.
   const collectionRate = totalRevenue > 0 ? Math.min(100, (totalPaid / totalRevenue) * 100) : 0;
   const collectionLabel =
     collectionRate >= 85 ? 'Excellent' : collectionRate >= 60 ? 'Healthy' : collectionRate >= 35 ? 'Watch' : 'At Risk';
   const collectionColor =
     collectionRate >= 85 ? '#10b981' : collectionRate >= 60 ? '#34d399' : collectionRate >= 35 ? '#f59e0b' : '#f43f5e';
+  const gaugeCircumference = 251.2; // half-circle path length, matches the SVG path below
+  const gaugeDash = (collectionRate / 100) * gaugeCircumference;
 
+  // Recent invoices, newest first, for the "Recent Activity" panel
   const recentInvoices = [...invoices]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
-  const statusChip = (status: string) => {
-    switch (status) {
-      case 'Paid':
-        return { bg: 'bg-emerald-50', text: 'text-emerald-600', dot: 'bg-emerald-400' };
-      case 'Overdue':
-        return { bg: 'bg-rose-50', text: 'text-rose-600', dot: 'bg-rose-400' };
-      default:
-        return { bg: 'bg-amber-50', text: 'text-amber-600', dot: 'bg-amber-400' };
-    }
-  };
-
-  // Get user initials for avatar
-  const userInitials = user.displayName
-    ? user.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : user.email?.slice(0, 2).toUpperCase() || 'U';
-
   return (
-    <div className="min-h-screen bg-[#f8f9fc]" id="dashboard-root">
-      {/* Clean Top Navigation */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-40" id="global-navbar">
-        <div className="max-w-[1400px] mx-auto px-8 py-4 flex justify-between items-center">
-          {/* Left: Logo + Nav */}
-          <div className="flex items-center gap-10">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200/50">
-                <Receipt className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-xl font-bold text-gray-900 tracking-tight">InvoiceHub</span>
+    <div
+      className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-slate-50"
+      id="dashboard-root"
+    >
+      {/* 1. Global Navigation Bar */}
+      <header className="bg-white/70 backdrop-blur-md border-b border-white/60 sticky top-0 z-40 px-6 py-4" id="global-navbar">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-600 text-white p-2.5 rounded-2xl shadow-md shadow-indigo-200">
+              <Database className="w-6 h-6" />
             </div>
-
-            {/* Navigation tabs */}
-            <nav className="hidden md:flex items-center gap-1">
-              <button
-                onClick={() => setViewState('dashboard')}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                  viewState === 'dashboard'
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Overview
-              </button>
-              <button
-                onClick={() => { setEditingInvoice(undefined); setViewState('create'); }}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                  viewState === 'create'
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Create
-              </button>
-              <button
-                onClick={() => setViewState('settings')}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                  viewState === 'settings'
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Settings
-              </button>
-            </nav>
+            <div>
+              <h1 className="text-lg font-black text-slate-800 tracking-tight leading-tight">Supabase Invoice Ledger</h1>
+              <p className="text-xs text-slate-400 mt-0.5 font-medium flex items-center gap-1">
+                <CloudLightning className="w-3 h-3 text-emerald-500 animate-pulse" /> Live Supabase Database Connected
+              </p>
+            </div>
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-3">
-            {/* Search */}
-            <div className="hidden lg:flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-2.5 border border-gray-100">
-              <Search className="w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search invoices..."
-                className="bg-transparent text-sm text-gray-600 placeholder-gray-400 outline-none w-40"
-              />
-            </div>
-
-            {/* Sync button */}
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <button
+              onClick={() => setViewState('settings')}
+              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/70 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              <SettingsIcon className="w-3.5 h-3.5" /> Settings
+            </button>
             <button
               onClick={fetchInvoices}
               disabled={loadingInvoices}
-              className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-all cursor-pointer"
-              title="Sync Database"
+              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/70 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
             >
-              <RefreshCw className={`w-4 h-4 text-gray-500 ${loadingInvoices ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingInvoices ? 'animate-spin' : ''}`} /> Sync DB
             </button>
-
-            {/* Notifications */}
-            <button className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-all cursor-pointer relative">
-              <Bell className="w-4 h-4 text-gray-500" />
-              {overdueCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 rounded-full text-[9px] text-white font-bold flex items-center justify-center">
-                  {overdueCount}
-                </span>
-              )}
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Sign Out
             </button>
-
-            {/* User avatar + logout */}
-            <div className="flex items-center gap-2 ml-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-violet-400 to-purple-500 rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-md shadow-purple-200/50">
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt="" className="w-full h-full rounded-xl object-cover" />
-                ) : (
-                  userInitials
-                )}
-              </div>
-              <button
-                onClick={onLogout}
-                className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer p-1"
-                title="Sign Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-[1400px] mx-auto px-8 py-8" id="dashboard-main">
+      {/* Main Container */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8" id="dashboard-main">
         {error && (
           <div className="space-y-6 mb-8 animate-fade-in">
-            <div className="bg-rose-50 text-rose-700 border border-rose-100 p-5 rounded-2xl text-sm font-medium flex gap-3 items-start">
+            <div className="bg-rose-50 text-rose-600 border border-rose-100 p-5 rounded-2xl text-sm font-medium flex gap-3 items-start shadow-sm">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-rose-800">Connection Error</p>
+                <p className="font-bold text-rose-800">Supabase Query Error</p>
                 <p className="text-xs text-rose-500 mt-1">{error}</p>
               </div>
             </div>
 
-            <div className="bg-white border border-gray-100 p-8 rounded-3xl space-y-5">
+            <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Database Setup Required</h3>
-                  <p className="text-sm text-gray-500 mt-1.5 leading-relaxed max-w-xl">
-                    Create the <code className="bg-gray-100 px-1.5 py-0.5 rounded-md font-mono text-xs text-gray-700">invoices</code> table in your Supabase project by running this SQL:
+                  <h3 className="text-base font-black text-slate-800 tracking-tight">Supabase Table Setup Required</h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    If you haven't created the <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-700">invoices</code> table in your Supabase project yet, paste and run the query below in your <strong>Supabase SQL Editor</strong>:
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleCopySql}
-                  className="bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                 >
                   {copiedSql ? "Copied!" : "Copy SQL"}
                 </button>
               </div>
-              <pre className="bg-gray-900 text-gray-100 p-5 rounded-2xl font-mono text-[11px] overflow-x-auto leading-relaxed max-h-56">
+              <pre className="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-[11px] overflow-x-auto leading-relaxed max-h-64 shadow-inner">
                 {supabaseSqlSchema}
               </pre>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                <div className="bg-blue-50 text-blue-700 p-4 rounded-2xl">
-                  <span className="font-semibold block mb-1 text-sm">Step 1</span>
-                  <p className="text-xs leading-relaxed">Open your Supabase SQL Editor</p>
+              <div className="flex flex-col sm:flex-row gap-3 pt-2 text-xs">
+                <div className="bg-indigo-50 text-indigo-700 p-3 rounded-xl flex-1 border border-indigo-100/50">
+                  <span className="font-bold block mb-1">💡 Step 1: Open Supabase</span>
+                  Go to your Supabase project dashboard and open the <strong>SQL Editor</strong> tab on the left navigation panel.
                 </div>
-                <div className="bg-emerald-50 text-emerald-700 p-4 rounded-2xl">
-                  <span className="font-semibold block mb-1 text-sm">Step 2</span>
-                  <p className="text-xs leading-relaxed">Paste the SQL and click Run</p>
+                <div className="bg-emerald-50 text-emerald-700 p-3 rounded-xl flex-1 border border-emerald-100/50">
+                  <span className="font-bold block mb-1">🚀 Step 2: Paste & Run</span>
+                  Click <strong>"New query"</strong>, paste the copied SQL schema, and hit <strong>"Run"</strong>.
                 </div>
-                <div className="bg-amber-50 text-amber-700 p-4 rounded-2xl">
-                  <span className="font-semibold block mb-1 text-sm">Step 3</span>
-                  <p className="text-xs leading-relaxed">Click Sync to load your data</p>
+                <div className="bg-amber-50 text-amber-700 p-3 rounded-xl flex-1 border border-amber-100/50">
+                  <span className="font-bold block mb-1">🔄 Step 3: Synchronize</span>
+                  Once the query completes successfully, click the <strong>"Sync DB"</strong> button above to load your ledger!
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Dashboard View */}
+        {/* VIEW 1: Main Invoices Control Panel Dashboard */}
         {viewState === 'dashboard' && (
           <div className="space-y-8 animate-fade-in" id="main-dashboard-panels">
-            {/* Welcome + Quick Actions */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Welcome back{user.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} 👋
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">Here's what's happening with your invoices today.</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={fetchInvoices}
-                  className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 px-4 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} />
-                  Sync
-                </button>
-                <button
-                  onClick={() => { setEditingInvoice(undefined); setViewState('create'); }}
-                  className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-lg shadow-blue-200/50 cursor-pointer"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  New Invoice
-                </button>
-              </div>
-            </div>
-
-            {/* KPI Cards Row - Bankio Style */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" id="kpi-cards">
-              {/* Total Revenue */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-11 h-11 bg-blue-50 rounded-2xl flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 text-blue-500" />
-                  </div>
-                  <span className="flex items-center gap-0.5 text-xs font-medium text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">
-                    <ArrowUpRight className="w-3 h-3" />
-                    12%
+            {/* Hero row: revenue hero (2 cols) + recent activity + collection health, Bankio-style 3-card top row */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 items-start" id="hero-row">
+              {/* Hero card: Total Revenue */}
+              <div className="lg:col-span-2 bg-white p-7 rounded-3xl border border-white shadow-sm shadow-slate-200/60">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Revenue</span>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-5xl font-black text-slate-900 tracking-tight">
+                    ${revenueSplit.whole}
                   </span>
+                  <span className="text-lg font-bold text-slate-300">.{revenueSplit.frac}</span>
                 </div>
-                <p className="text-sm text-gray-500 font-medium">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </p>
-              </div>
 
-              {/* Collected */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-11 h-11 bg-emerald-50 rounded-2xl flex items-center justify-center">
-                    <CheckCircle className="w-5 h-5 text-emerald-500" />
-                  </div>
-                  <span className="flex items-center gap-0.5 text-xs font-medium text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">
-                    <ArrowUpRight className="w-3 h-3" />
-                    {collectionRate.toFixed(0)}%
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500 font-medium">Collected</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  ${totalPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </p>
-              </div>
-
-              {/* Pending */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-11 h-11 bg-amber-50 rounded-2xl flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <span className="flex items-center gap-0.5 text-xs font-medium text-amber-500 bg-amber-50 px-2 py-1 rounded-lg">
-                    <ArrowDownRight className="w-3 h-3" />
-                    Pending
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500 font-medium">Outstanding</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  ${totalPending.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </p>
-              </div>
-
-              {/* Overdue */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-11 h-11 bg-rose-50 rounded-2xl flex items-center justify-center">
-                    <AlertCircle className="w-5 h-5 text-rose-500" />
-                  </div>
-                  {overdueCount > 0 && (
-                    <span className="flex items-center gap-0.5 text-xs font-medium text-rose-500 bg-rose-50 px-2 py-1 rounded-lg">
-                      <AlertCircle className="w-3 h-3" />
-                      Alert
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-500 font-medium">Overdue</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{overdueCount}</p>
-              </div>
-            </div>
-
-            {/* Main Grid: Charts + Collection Health + Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Charts Section */}
-              <div className="lg:col-span-2 bg-white p-7 rounded-3xl border border-gray-100">
-                <div className="flex justify-between items-center mb-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Analytics</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Revenue trends & breakdown</p>
-                  </div>
-                  <button className="text-xs text-blue-500 font-medium hover:text-blue-600 transition-colors cursor-pointer flex items-center gap-1">
-                    See All <ChevronRight className="w-3 h-3" />
+                <div className="flex flex-wrap items-center gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingInvoice(undefined);
+                      setViewState('create');
+                    }}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-3 rounded-2xl transition-all shadow-md shadow-indigo-100 cursor-pointer"
+                  >
+                    <PlusCircle className="w-4 h-4" /> New Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchInvoices}
+                    className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-sm font-bold px-5 py-3 rounded-2xl transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} /> Sync DB
                   </button>
                 </div>
-                <Charts invoices={invoices} />
-              </div>
 
-              {/* Right Column: Collection Health + Quick Actions */}
-              <div className="space-y-6">
-                {/* Collection Health - Bankio gauge style */}
-                <div className="bg-white p-7 rounded-3xl border border-gray-100">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-gray-900">Collection Health</h3>
-                    <TrendingUp className="w-4 h-4 text-gray-300" />
-                  </div>
-
-                  <div className="flex flex-col items-center py-4">
-                    <svg viewBox="0 0 200 120" className="w-full max-w-[180px]">
-                      <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="14" strokeLinecap="round" />
-                      <path
-                        d="M 20 110 A 80 80 0 0 1 180 110"
-                        fill="none"
-                        stroke={collectionColor}
-                        strokeWidth="14"
-                        strokeLinecap="round"
-                        strokeDasharray={`${(collectionRate / 100) * 251.2} 251.2`}
-                      />
-                    </svg>
-
-                    <div className="text-center -mt-4">
-                      <span className="text-3xl font-bold text-gray-900">{collectionRate.toFixed(0)}%</span>
-                      <p className="text-sm font-medium mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
+                {/* Mini stat strip: Paid / Pending / Overdue */}
+                <div className="grid grid-cols-3 gap-3 mt-7">
+                  <div className="bg-emerald-50 rounded-2xl p-4">
+                    <div className="flex items-center gap-1.5 text-emerald-600">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Collected</span>
                     </div>
+                    <span className="text-lg font-black text-emerald-700 block mt-1">
+                      ${totalPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
                   </div>
-
-                  <p className="text-xs text-gray-400 text-center leading-relaxed">
-                    {invoices.length} invoice{invoices.length === 1 ? '' : 's'} tracked
-                  </p>
-                </div>
-
-                {/* Quick Actions Card */}
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-7 rounded-3xl text-white">
-                  <h3 className="text-lg font-bold mb-2">Quick Actions</h3>
-                  <p className="text-blue-100 text-xs mb-5">Manage your invoices faster</p>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => { setEditingInvoice(undefined); setViewState('create'); }}
-                      className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-3 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <Send className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Create</span>
-                    </button>
-                    <button
-                      onClick={fetchInvoices}
-                      className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-3 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <Download className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Sync</span>
-                    </button>
-                    <button
-                      onClick={() => setViewState('settings')}
-                      className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-3 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <SettingsIcon className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Settings</span>
-                    </button>
-                    <button
-                      className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-3 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <CreditCard className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Reports</span>
-                    </button>
+                  <div className="bg-amber-50 rounded-2xl p-4">
+                    <div className="flex items-center gap-1.5 text-amber-600">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Pending</span>
+                    </div>
+                    <span className="text-lg font-black text-amber-600 block mt-1">
+                      ${totalPending.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="bg-rose-50 rounded-2xl p-4">
+                    <div className="flex items-center gap-1.5 text-rose-600">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Overdue</span>
+                    </div>
+                    <span className="text-lg font-black text-rose-600 block mt-1">{overdueCount}</span>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Recent Activity Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Recent Transactions */}
-              <div className="lg:col-span-2 bg-white p-7 rounded-3xl border border-gray-100">
-                <div className="flex justify-between items-center mb-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Recent Activity</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Latest invoice transactions</p>
-                  </div>
-                  <span className="text-xs font-medium text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg">
-                    {invoices.length} total
-                  </span>
+              {/* Recent activity panel */}
+              <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-black text-slate-800">Recent Activity</h3>
+                  <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">{invoices.length} total</span>
                 </div>
-
                 <div className="space-y-1">
                   {recentInvoices.length === 0 && (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <Receipt className="w-7 h-7 text-gray-300" />
-                      </div>
-                      <p className="text-sm text-gray-400 font-medium">No invoices yet</p>
-                      <p className="text-xs text-gray-300 mt-1">Create your first invoice to get started</p>
-                    </div>
+                    <p className="text-xs text-slate-400 py-6 text-center">No invoices yet. Create your first one.</p>
                   )}
                   {recentInvoices.map((inv) => {
-                    const chip = statusChip(inv.status);
+                    const style = STATUS_STYLE[inv.status] || STATUS_STYLE.Pending;
+                    const avatar = avatarFor(inv.customerName);
                     return (
-                      <div key={inv.id} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-gray-50 transition-colors group">
-                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${chip.bg}`}>
-                          <span className={`text-sm font-bold ${chip.text}`}>
-                            {inv.customerName.charAt(0).toUpperCase()}
-                          </span>
+                      <div key={`${inv.id}-${inv.rowIndex}`} className="flex items-center gap-3 py-2.5">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-black ${avatar.bg} ${avatar.text}`}>
+                          {avatar.initials}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-gray-800 truncate">{inv.customerName}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{inv.date} · {inv.id}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-gray-900">
-                            ${inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          <p className="text-xs font-bold text-slate-800 truncate">{inv.customerName}</p>
+                          <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: style.dot }} />
+                            {inv.status} · {inv.date}
                           </p>
-                          <div className="flex items-center gap-1.5 justify-end mt-0.5">
-                            <span className={`w-1.5 h-1.5 rounded-full ${chip.dot}`}></span>
-                            <span className={`text-[11px] font-medium ${chip.text}`}>{inv.status}</span>
-                          </div>
                         </div>
+                        <span className={`text-xs font-black shrink-0 ${style.amountText}`}>
+                          ${inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Invoice Summary Card */}
-              <div className="bg-white p-7 rounded-3xl border border-gray-100">
-                <div className="flex justify-between items-center mb-5">
-                  <h3 className="text-lg font-bold text-gray-900">Summary</h3>
-                  <MoreHorizontal className="w-4 h-4 text-gray-300" />
+              {/* Signature element: Collection Health gauge */}
+              <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60 flex flex-col items-center">
+                <div className="w-full flex justify-between items-center">
+                  <h3 className="text-sm font-black text-slate-800">Collection Health</h3>
+                  <TrendingUp className="w-4 h-4 text-slate-300" />
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
-                        <Receipt className="w-4 h-4 text-blue-500" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Total Invoices</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{invoices.length}</span>
-                  </div>
+                <svg viewBox="0 0 200 120" className="w-full max-w-[200px] mt-3">
+                  <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="16" strokeLinecap="round" />
+                  <path
+                    d="M 20 110 A 80 80 0 0 1 180 110"
+                    fill="none"
+                    stroke={collectionColor}
+                    strokeWidth="16"
+                    strokeLinecap="round"
+                    strokeDasharray={`${gaugeDash} ${gaugeCircumference}`}
+                  />
+                </svg>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-emerald-100 rounded-xl flex items-center justify-center">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Paid</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">
-                      {invoices.filter(i => i.status === 'Paid').length}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
-                        <Clock className="w-4 h-4 text-amber-500" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Pending</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">
-                      {invoices.filter(i => i.status === 'Pending' || i.status === 'Due').length}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-rose-100 rounded-xl flex items-center justify-center">
-                        <AlertCircle className="w-4 h-4 text-rose-500" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Overdue</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{overdueCount}</span>
-                  </div>
+                <div className="text-center -mt-8">
+                  <span className="text-3xl font-black text-slate-900">{collectionRate.toFixed(0)}%</span>
+                  <p className="text-xs font-bold mt-0.5" style={{ color: collectionColor }}>{collectionLabel}</p>
                 </div>
+
+                <p className="text-[10px] text-slate-400 text-center mt-3 leading-relaxed">
+                  Share of billed revenue collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
+                </p>
               </div>
             </div>
 
-            {/* Invoice Ledger Table */}
-            <div className="bg-white p-7 rounded-3xl border border-gray-100">
-              <div className="flex justify-between items-center mb-5">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900">Invoice Ledger</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">All your invoices in one place</p>
-                </div>
-                <button
-                  onClick={() => { setEditingInvoice(undefined); setViewState('create'); }}
-                  className="flex items-center gap-2 text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors cursor-pointer"
-                >
-                  <PlusCircle className="w-4 h-4" /> Add New
-                </button>
+            {/* Analytics — Charts.tsx manages its own card grid, no extra wrapper */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <h2 className="text-base font-black text-slate-800">Real-Time Database Analytics</h2>
+                <DollarSign className="w-4 h-4 text-slate-300" />
               </div>
+              <Charts invoices={invoices} />
+            </div>
+
+            {/* Invoice Ledger — InvoiceList.tsx manages its own card + table */}
+            <div className="space-y-3">
+              <h2 className="text-base font-black text-slate-800">Invoice Ledger</h2>
               <InvoiceList
                 invoices={invoices}
                 onEdit={(inv) => {
@@ -760,7 +566,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
           </div>
         )}
 
-        {/* Create/Edit Invoice */}
+        {/* VIEW 2: Create/Edit Invoice Form Panel */}
         {(viewState === 'create' || viewState === 'edit') && (
           <div className="animate-fade-in" id="invoice-editor-section">
             <InvoiceForm
@@ -780,7 +586,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
           </div>
         )}
 
-        {/* Settings */}
+        {/* VIEW 3: Settings Panel */}
         {viewState === 'settings' && (
           <div className="animate-fade-in" id="settings-section">
             <Settings
@@ -793,26 +599,26 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         )}
       </main>
 
-      {/* Custom Confirmation Modal - Clean style */}
+      {/* Custom Premium Confirmation Modal */}
       {confirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-fade-in" id="custom-confirm-dialog">
-          <div className="bg-white rounded-3xl max-w-md w-full border border-gray-100 shadow-2xl p-7 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in" id="custom-confirm-dialog">
+          <div className="bg-white rounded-3xl max-w-md w-full border border-slate-100 shadow-2xl p-6 space-y-6">
             <div className="space-y-2">
-              <h3 className="text-lg font-bold text-gray-900">{confirmModal.title}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">{confirmModal.message}</p>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight">{confirmModal.title}</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">{confirmModal.message}</p>
             </div>
             <div className="flex gap-3 justify-end pt-2">
               <button
                 type="button"
                 onClick={() => setConfirmModal(null)}
-                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-sm font-medium transition-colors cursor-pointer"
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmModal.onConfirm}
-                className={`px-5 py-2.5 text-white rounded-xl text-sm font-semibold transition-all shadow-sm cursor-pointer ${confirmModal.actionStyle}`}
+                className={`px-4 py-2.5 text-white rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer ${confirmModal.actionStyle}`}
               >
                 {confirmModal.actionLabel}
               </button>
