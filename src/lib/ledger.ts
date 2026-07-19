@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 
 export interface LedgerInvoice {
-  id: number;
+  id: string;
   guest_name: string;
   hotel_name: string;
   total_amount: number;
@@ -13,6 +13,7 @@ export interface CashExpense {
   name: string;
   amount: number;
   description: string;
+  tag: string;
   created_at: string;
 }
 
@@ -60,15 +61,17 @@ export async function getCashExpenses(): Promise<CashExpense[]> {
     name: row.name,
     amount: Number(row.amount || 0),
     description: row.description || "",
+    tag: row.tag || "expense",
     created_at: row.created_at,
   }));
 }
 
 // Create a ledger invoice entry
-export async function createLedgerInvoice(invoice: Omit<LedgerInvoice, "id" | "created_at">): Promise<void> {
+export async function createLedgerInvoice(invoice: Omit<LedgerInvoice, "created_at">): Promise<void> {
   const { error } = await supabase
     .from("ledger_invoices")
     .insert({
+      id: invoice.id,
       guest_name: invoice.guest_name,
       hotel_name: invoice.hotel_name,
       total_amount: invoice.total_amount,
@@ -87,6 +90,7 @@ export async function createCashExpense(expense: Omit<CashExpense, "id" | "creat
       name: expense.name,
       amount: expense.amount,
       description: expense.description,
+      tag: expense.tag || "expense",
     });
 
   if (error) {
@@ -95,7 +99,7 @@ export async function createCashExpense(expense: Omit<CashExpense, "id" | "creat
 }
 
 // Delete a ledger invoice
-export async function deleteLedgerInvoice(id: number): Promise<void> {
+export async function deleteLedgerInvoice(id: string): Promise<void> {
   const { error } = await supabase
     .from("ledger_invoices")
     .delete()
