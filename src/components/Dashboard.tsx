@@ -1,32 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { Invoice } from '../types';
-import { 
-  getInvoices, 
-  createInvoice, 
-  updateInvoice, 
-  deleteInvoice 
+import {
+  getInvoices,
+  createInvoice,
+  updateInvoice,
+  deleteInvoice
 } from '../lib/supabase';
-import { 
-  InvoiceTemplate, 
-  getUserSettings, 
-  getTemplateWithDefaults 
+import {
+  InvoiceTemplate,
+  getUserSettings,
+  getTemplateWithDefaults
 } from '../lib/settings';
 import Charts from './Charts';
 import InvoiceList from './InvoiceList';
 import InvoiceForm from './InvoiceForm';
 import Settings from './Settings';
-import { 
+import {
   Database,
-  LogOut, 
-  RefreshCw, 
-  PlusCircle, 
-  CheckCircle, 
-  AlertCircle, 
-  Clock, 
+  LogOut,
+  RefreshCw,
+  PlusCircle,
+  CheckCircle,
+  AlertCircle,
+  Clock,
   DollarSign,
   CloudLightning,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Receipt,
+  TrendingUp
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -41,7 +43,7 @@ export default function Dashboard({ user, token, onLogout }: DashboardProps) {
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
-  
+
   // Template settings loaded from Supabase
   const [invoiceTemplate, setInvoiceTemplate] = useState<InvoiceTemplate | null>(null);
 
@@ -143,7 +145,6 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         } else {
           await createInvoice(invoiceData);
         }
-
         await fetchInvoices();
         setViewState('dashboard');
         setEditingInvoice(undefined);
@@ -159,7 +160,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         title: 'Confirm Booking Update',
         message: `Are you sure you want to save your changes to invoice #${invoiceData.id}? This will synchronize directly with Supabase.`,
         actionLabel: 'Update Booking',
-        actionStyle: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+        actionStyle: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500',
         onConfirm: () => {
           performSave();
           setConfirmModal(null);
@@ -230,7 +231,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
       title: 'Delete Invoice',
       message: `Are you sure you want to permanently delete invoice #${invoice.id} from your Supabase database? This action cannot be undone.`,
       actionLabel: 'Delete Permanently',
-      actionStyle: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+      actionStyle: 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-500',
       onConfirm: () => {
         performDelete();
         setConfirmModal(null);
@@ -248,11 +249,9 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     invoices.forEach((inv) => {
       // Skip archived if any status is soft-archived
       if (inv.status === ('Archived' as any)) return;
-
       totalRevenue += inv.totalAmount;
       totalPaid += inv.amountPaid;
       totalPending += inv.balance;
-
       if (inv.status === 'Overdue') {
         overdueCount += 1;
       }
@@ -263,13 +262,40 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
   const { totalRevenue, totalPaid, totalPending, overdueCount } = calculateKPIs();
 
+  // Collection health: what % of billed revenue has actually been collected.
+  // Drives the gauge in the "Collection Health" card, and its color band.
+  const collectionRate = totalRevenue > 0 ? Math.min(100, (totalPaid / totalRevenue) * 100) : 0;
+  const collectionLabel =
+    collectionRate >= 85 ? 'Excellent' : collectionRate >= 60 ? 'Healthy' : collectionRate >= 35 ? 'Watch' : 'At Risk';
+  const collectionColor =
+    collectionRate >= 85 ? '#10b981' : collectionRate >= 60 ? '#34d399' : collectionRate >= 35 ? '#f59e0b' : '#f43f5e';
+
+  // Recent invoices, newest first, for the "Recent Activity" panel
+  const recentInvoices = [...invoices]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 5);
+
+  const statusChip = (status: string) => {
+    switch (status) {
+      case 'Paid':
+        return { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: <CheckCircle className="w-4 h-4" /> };
+      case 'Overdue':
+        return { bg: 'bg-rose-50', text: 'text-rose-600', icon: <AlertCircle className="w-4 h-4" /> };
+      default:
+        return { bg: 'bg-amber-50', text: 'text-amber-600', icon: <Clock className="w-4 h-4" /> };
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50/50" id="dashboard-root">
+    <div
+      className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-slate-50"
+      id="dashboard-root"
+    >
       {/* 1. Global Navigation Bar */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-40 px-6 py-4" id="global-navbar">
+      <header className="bg-white/70 backdrop-blur-md border-b border-white/60 sticky top-0 z-40 px-6 py-4" id="global-navbar">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 text-white p-2.5 rounded-2xl shadow-sm shadow-blue-100">
+            <div className="bg-indigo-600 text-white p-2.5 rounded-2xl shadow-md shadow-indigo-200">
               <Database className="w-6 h-6" />
             </div>
             <div>
@@ -283,19 +309,17 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
               onClick={() => setViewState('settings')}
-              className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/70 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
             >
               <SettingsIcon className="w-3.5 h-3.5" /> Settings
             </button>
-
             <button
               onClick={fetchInvoices}
               disabled={loadingInvoices}
-              className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/70 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loadingInvoices ? 'animate-spin' : ''}`} /> Sync DB
             </button>
-            
             <button
               onClick={onLogout}
               className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
@@ -310,11 +334,11 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8" id="dashboard-main">
         {error && (
           <div className="space-y-6 mb-8 animate-fade-in">
-            <div className="bg-red-50 text-red-600 border border-red-100 p-5 rounded-2xl text-sm font-medium flex gap-3 items-start shadow-sm">
+            <div className="bg-rose-50 text-rose-600 border border-rose-100 p-5 rounded-2xl text-sm font-medium flex gap-3 items-start shadow-sm">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-red-800">Supabase Query Error</p>
-                <p className="text-xs text-red-500 mt-1">{error}</p>
+                <p className="font-bold text-rose-800">Supabase Query Error</p>
+                <p className="text-xs text-rose-500 mt-1">{error}</p>
               </div>
             </div>
 
@@ -329,18 +353,16 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 <button
                   type="button"
                   onClick={handleCopySql}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                 >
                   {copiedSql ? "Copied!" : "Copy SQL"}
                 </button>
               </div>
-
               <pre className="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-[11px] overflow-x-auto leading-relaxed max-h-64 shadow-inner">
                 {supabaseSqlSchema}
               </pre>
-
               <div className="flex flex-col sm:flex-row gap-3 pt-2 text-xs">
-                <div className="bg-blue-50 text-blue-700 p-3 rounded-xl flex-1 border border-blue-100/50">
+                <div className="bg-indigo-50 text-indigo-700 p-3 rounded-xl flex-1 border border-indigo-100/50">
                   <span className="font-bold block mb-1">💡 Step 1: Open Supabase</span>
                   Go to your Supabase project dashboard and open the <strong>SQL Editor</strong> tab on the left navigation panel.
                 </div>
@@ -359,84 +381,145 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
         {/* VIEW 1: Main Invoices Control Panel Dashboard */}
         {viewState === 'dashboard' && (
-          <div className="space-y-8 animate-fade-in" id="main-dashboard-panels">
-            {/* KPI row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" id="kpi-cards-grid">
-              {/* KPI 1: Revenue */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="bg-blue-50 text-blue-600 p-3.5 rounded-xl">
-                  <DollarSign className="w-6 h-6" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Revenue</span>
-                  <span className="text-xl font-black text-slate-800">
+          <div className="space-y-6 animate-fade-in" id="main-dashboard-panels">
+            {/* Hero row: revenue hero + recent activity, Bankio-style 2/1 split */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5" id="hero-row">
+              {/* Hero card: Total Revenue */}
+              <div className="lg:col-span-2 bg-white p-7 rounded-3xl border border-white shadow-sm shadow-slate-200/60">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Revenue</span>
+                <div className="mt-2 flex items-baseline gap-1">
+                  <span className="text-5xl font-black text-slate-900 tracking-tight">
                     ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </span>
+                  <span className="text-lg font-bold text-slate-300">.{String(Math.round((totalRevenue % 1) * 100)).padStart(2, '0')}</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingInvoice(undefined);
+                      setViewState('create');
+                    }}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-3 rounded-2xl transition-all shadow-md shadow-indigo-100 cursor-pointer"
+                  >
+                    <PlusCircle className="w-4 h-4" /> New Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchInvoices}
+                    className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-sm font-bold px-5 py-3 rounded-2xl transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} /> Sync DB
+                  </button>
+                </div>
+
+                {/* Mini stat strip: Paid / Pending / Overdue, replaces "My cards" */}
+                <div className="grid grid-cols-3 gap-3 mt-7">
+                  <div className="bg-emerald-50 rounded-2xl p-4">
+                    <div className="flex items-center gap-1.5 text-emerald-600">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Collected</span>
+                    </div>
+                    <span className="text-lg font-black text-emerald-700 block mt-1">
+                      ${totalPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="bg-amber-50 rounded-2xl p-4">
+                    <div className="flex items-center gap-1.5 text-amber-600">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Pending</span>
+                    </div>
+                    <span className="text-lg font-black text-amber-600 block mt-1">
+                      ${totalPending.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="bg-rose-50 rounded-2xl p-4">
+                    <div className="flex items-center gap-1.5 text-rose-600">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Overdue</span>
+                    </div>
+                    <span className="text-lg font-black text-rose-600 block mt-1">{overdueCount}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* KPI 2: Paid */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="bg-emerald-50 text-emerald-600 p-3.5 rounded-xl">
-                  <CheckCircle className="w-6 h-6" />
+              {/* Recent activity panel */}
+              <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-base font-black text-slate-800">Recent Activity</h3>
+                  <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">{invoices.length} total</span>
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Collected / Paid</span>
-                  <span className="text-xl font-black text-emerald-700">
-                    ${totalPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-              </div>
-
-              {/* KPI 3: Pending */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="bg-amber-50 text-amber-600 p-3.5 rounded-xl">
-                  <Clock className="w-6 h-6" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Unpaid / Pending</span>
-                  <span className="text-xl font-black text-amber-600">
-                    ${totalPending.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-              </div>
-
-              {/* KPI 4: Overdue */}
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="bg-violet-50 text-violet-600 p-3.5 rounded-xl">
-                  <AlertCircle className="w-6 h-6" />
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Overdue Invoices</span>
-                  <span className="text-xl font-black text-violet-600">{overdueCount}</span>
+                <div className="space-y-1">
+                  {recentInvoices.length === 0 && (
+                    <p className="text-xs text-slate-400 py-6 text-center">No invoices yet. Create your first one.</p>
+                  )}
+                  {recentInvoices.map((inv) => {
+                    const chip = statusChip(inv.status);
+                    return (
+                      <div key={inv.id} className="flex items-center gap-3 py-2.5">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${chip.bg} ${chip.text}`}>
+                          {chip.icon}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-800 truncate">{inv.customerName}</p>
+                          <p className="text-[10px] text-slate-400">{inv.date}</p>
+                        </div>
+                        <span className={`text-xs font-black ${chip.text}`}>
+                          ${inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
-            {/* Charts View Toggle Header */}
-            <div className="flex justify-between items-center pb-1">
-              <h2 className="text-lg font-extrabold text-slate-800">Real-Time Database Analytics</h2>
-              
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingInvoice(undefined);
-                  setViewState('create');
-                }}
-                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black px-4 py-2.5 rounded-xl transition-all shadow-md shadow-blue-100 cursor-pointer"
-              >
-                <PlusCircle className="w-4 h-4" /> Create Invoice
-              </button>
-            </div>
+            {/* Charts + Collection Health row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60">
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-base font-black text-slate-800">Real-Time Database Analytics</h2>
+                  <Receipt className="w-4 h-4 text-slate-300" />
+                </div>
+                <Charts invoices={invoices} />
+              </div>
 
-            {/* Graphs / Charts component */}
-            <Charts invoices={invoices} />
+              {/* Signature element: Collection Health gauge */}
+              <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60 flex flex-col items-center justify-between">
+                <div className="w-full flex justify-between items-center">
+                  <h3 className="text-base font-black text-slate-800">Collection Health</h3>
+                  <TrendingUp className="w-4 h-4 text-slate-300" />
+                </div>
+
+                <svg viewBox="0 0 200 120" className="w-full max-w-[220px] mt-2">
+                  <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="16" strokeLinecap="round" />
+                  <path
+                    d="M 20 110 A 80 80 0 0 1 180 110"
+                    fill="none"
+                    stroke={collectionColor}
+                    strokeWidth="16"
+                    strokeLinecap="round"
+                    strokeDasharray={`${(collectionRate / 100) * 251.2} 251.2`}
+                  />
+                </svg>
+
+                <div className="text-center -mt-6">
+                  <span className="text-4xl font-black text-slate-900">{collectionRate.toFixed(0)}%</span>
+                  <p className="text-sm font-bold mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
+                </div>
+
+                <p className="text-[11px] text-slate-400 text-center mt-4 leading-relaxed">
+                  Share of billed revenue already collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
+                </p>
+              </div>
+            </div>
 
             {/* Invoices List Display */}
-            <div className="space-y-4 pt-4">
-              <h2 className="text-lg font-extrabold text-slate-800">Invoice Ledger</h2>
-              <InvoiceList 
-                invoices={invoices} 
+            <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60 space-y-4">
+              <h2 className="text-base font-black text-slate-800">Invoice Ledger</h2>
+              <InvoiceList
+                invoices={invoices}
                 onEdit={(inv) => {
                   setEditingInvoice(inv);
                   setViewState('edit');
@@ -455,8 +538,8 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
             <InvoiceForm
               invoice={editingInvoice}
               suggestInvoiceId={
-                viewState === 'create' 
-                  ? `INV-${Math.floor(1000 + Math.random() * 9000)}` 
+                viewState === 'create'
+                  ? `INV-${Math.floor(1000 + Math.random() * 9000)}`
                   : undefined
               }
               onSave={handleSaveInvoice}
@@ -490,7 +573,6 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               <h3 className="text-lg font-black text-slate-900 tracking-tight">{confirmModal.title}</h3>
               <p className="text-sm text-slate-500 leading-relaxed">{confirmModal.message}</p>
             </div>
-            
             <div className="flex gap-3 justify-end pt-2">
               <button
                 type="button"
