@@ -622,15 +622,15 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 </div>
               </div>
 
-              {/* Collection Health Gauge - spans 2 cols (second column) */}
-              <div className="lg:col-span-2 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
+              {/* Collection Health Gauge - spans 4 cols (original size) */}
+              <div className="lg:col-span-4 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-bold text-gray-900">Collection Health</h3>
                   <TrendingUp className="w-4 h-4 text-gray-300" />
                 </div>
 
                 <div className="flex-1 flex flex-col items-center justify-center py-4">
-                  <svg viewBox="0 0 200 120" className="w-full max-w-[180px]">
+                  <svg viewBox="0 0 200 120" className="w-full max-w-[220px]">
                     <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="16" strokeLinecap="round" />
                     <path
                       d="M 20 110 A 80 80 0 0 1 180 110"
@@ -643,13 +643,13 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                   </svg>
 
                   <div className="text-center -mt-5">
-                    <span className="text-3xl font-black text-gray-900">{collectionRate.toFixed(0)}%</span>
-                    <p className="text-xs font-bold mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
+                    <span className="text-4xl font-black text-gray-900">{collectionRate.toFixed(0)}%</span>
+                    <p className="text-sm font-bold mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
                   </div>
                 </div>
 
-                <p className="text-[10px] text-gray-400 text-center leading-relaxed mt-auto">
-                  Revenue collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
+                <p className="text-xs text-gray-400 text-center leading-relaxed mt-auto">
+                  Share of billed revenue collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
                 </p>
               </div>
 
