@@ -552,15 +552,85 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 </div>
               </div>
 
-              {/* Collection Health Gauge */}
+              {/* Today Collection Card */}
               <div className="lg:col-span-1 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-bold text-gray-900">Today Collection</h3>
+                  <TrendingUp className="w-4 h-4 text-gray-300" />
+                </div>
+
+                <div className="flex-1 flex flex-col items-center justify-center py-4">
+                  <span className="text-4xl font-black text-gray-900">
+                    ${invoices
+                      .filter(inv => inv.status === 'Paid' && inv.paymentDate === new Date().toISOString().split('T')[0])
+                      .reduce((sum, inv) => sum + inv.amountPaid, 0)
+                      .toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                  <p className="text-sm text-gray-400 mt-2">Collected today</p>
+                </div>
+
+                <div className="mt-auto space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-400">Invoices paid today</span>
+                    <span className="font-bold text-gray-700">
+                      {invoices.filter(inv => inv.status === 'Paid' && inv.paymentDate === new Date().toISOString().split('T')[0]).length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-gray-400">Pending today</span>
+                    <span className="font-bold text-gray-700">
+                      {invoices.filter(inv => inv.status === 'Pending' && inv.date === new Date().toISOString().split('T')[0]).length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions + Collection Health Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Quick Actions */}
+              <div className="bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { setEditingInvoice(undefined); setViewState('create'); }}
+                    className="flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 rounded-2xl transition-all cursor-pointer"
+                  >
+                    <PlusCircle className="w-5 h-5 text-blue-600" />
+                    <span className="text-sm font-semibold text-blue-700">New Invoice</span>
+                  </button>
+                  <button
+                    onClick={fetchInvoices}
+                    className="flex items-center gap-3 p-4 bg-indigo-50 hover:bg-indigo-100 rounded-2xl transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-5 h-5 text-indigo-600 ${loadingInvoices ? 'animate-spin' : ''}`} />
+                    <span className="text-sm font-semibold text-indigo-700">Sync Database</span>
+                  </button>
+                  <button
+                    onClick={() => setViewState('settings')}
+                    className="flex items-center gap-3 p-4 bg-gray-50 hover:bg-gray-100 rounded-2xl transition-all cursor-pointer"
+                  >
+                    <SettingsIcon className="w-5 h-5 text-gray-600" />
+                    <span className="text-sm font-semibold text-gray-700">Settings</span>
+                  </button>
+                  <button
+                    className="flex items-center gap-3 p-4 bg-emerald-50 hover:bg-emerald-100 rounded-2xl transition-all cursor-pointer"
+                  >
+                    <CheckCircle className="w-5 h-5 text-emerald-600" />
+                    <span className="text-sm font-semibold text-emerald-700">Mark All Paid</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Collection Health Gauge */}
+              <div className="bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-bold text-gray-900">Collection Health</h3>
                   <TrendingUp className="w-4 h-4 text-gray-300" />
                 </div>
 
                 <div className="flex-1 flex flex-col items-center justify-center py-4">
-                  <svg viewBox="0 0 200 120" className="w-full max-w-[200px]">
+                  <svg viewBox="0 0 200 120" className="w-full max-w-[220px]">
                     <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="16" strokeLinecap="round" />
                     <path
                       d="M 20 110 A 80 80 0 0 1 180 110"
