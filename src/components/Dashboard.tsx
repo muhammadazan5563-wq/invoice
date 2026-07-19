@@ -445,7 +445,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         {viewState === 'dashboard' && (
           <div className="space-y-8 animate-fade-in" id="main-dashboard-panels">
             {/* Hero Row: Total Revenue (wider) + Recent Activity + Collection Health */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6" id="hero-row">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start" id="hero-row">
               {/* Total Revenue Card - Wider (spans 2 cols) */}
               <div className="lg:col-span-2 bg-white p-8 rounded-3xl shadow-md shadow-gray-200/60">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Revenue</span>
