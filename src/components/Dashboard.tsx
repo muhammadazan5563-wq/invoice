@@ -16,6 +16,7 @@ import Charts from './Charts';
 import InvoiceList from './InvoiceList';
 import InvoiceForm from './InvoiceForm';
 import Settings from './Settings';
+import Ledger from './Ledger';
 import {
   LogOut,
   RefreshCw,
@@ -28,7 +29,8 @@ import {
   TrendingUp,
   Search,
   Bell,
-  ChevronRight
+  ChevronRight,
+  BookOpen
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -89,7 +91,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     setTimeout(() => setCopiedSql(false), 2000);
   };
 
-  const [viewState, setViewState] = useState<'dashboard' | 'create' | 'edit' | 'settings'>('dashboard');
+  const [viewState, setViewState] = useState<'dashboard' | 'create' | 'edit' | 'settings' | 'ledger'>('dashboard');
   const [editingInvoice, setEditingInvoice] = useState<Invoice | undefined>(undefined);
 
   const [confirmModal, setConfirmModal] = useState<{
@@ -325,6 +327,16 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 }`}
               >
                 Create
+              </button>
+              <button
+                onClick={() => setViewState('ledger')}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                  viewState === 'ledger'
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Ledger
               </button>
               <button
                 onClick={() => setViewState('settings')}
@@ -750,6 +762,11 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               template={invoiceTemplate}
             />
           </div>
+        )}
+
+        {/* Ledger */}
+        {viewState === 'ledger' && (
+          <Ledger />
         )}
 
         {/* Settings */}
