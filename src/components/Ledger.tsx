@@ -12,7 +12,7 @@ import {
   LedgerEntry,
 } from '../lib/ledger';
 import { getInvoices } from '../lib/supabase';
-import { getUserSettings, getTemplateWithDefaults, getCurrencySymbol } from '../lib/settings';
+import { InvoiceTemplate, getUserSettings, getTemplateWithDefaults, getCurrencySymbol } from '../lib/settings';
 import { Invoice, PaymentRecord } from '../types';
 import {
   PlusCircle,
@@ -33,7 +33,11 @@ import {
   Edit3,
 } from 'lucide-react';
 
-export default function Ledger() {
+interface LedgerProps {
+  template?: InvoiceTemplate | null;
+}
+
+export default function Ledger({ template }: LedgerProps) {
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [allInvoices, setAllInvoices] = useState<LedgerInvoice[]>([]);
   const [allExpenses, setAllExpenses] = useState<CashExpense[]>([]);
@@ -61,13 +65,20 @@ export default function Ledger() {
 
   useEffect(() => {
     fetchLedgerData();
-    loadCurrencySettings();
   }, []);
+
+  // Update currency symbol when template prop changes
+  useEffect(() => {
+    if (template?.currency) {
+      setCurrencySymbol(getCurrencySymbol(template.currency));
+    } else {
+      // Fallback: try to load from localStorage/Firebase
+      loadCurrencySettings();
+    }
+  }, [template]);
 
   const loadCurrencySettings = async () => {
     try {
-      // Try to get user settings from localStorage or auth context
-      // We'll use a simple approach: check if there's a firebase user in localStorage
       const keys = Object.keys(localStorage);
       const firebaseKey = keys.find(k => k.startsWith('firebase:authUser:'));
       if (firebaseKey) {
@@ -81,7 +92,6 @@ export default function Ledger() {
         }
       }
     } catch (err) {
-      // Silently fail - default to $
       console.warn('Failed to load currency settings for ledger:', err);
     }
   };
