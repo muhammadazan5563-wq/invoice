@@ -653,7 +653,25 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 </p>
               </div>
 
-              {/* Empty spacer or additional info - spans 2 cols (third column) */}
+            </div>
+
+            {/* Charts + Analytics + Summary Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-8 gap-6 items-start">
+              {/* Analytics - spans 6 cols */}
+              <div className="lg:col-span-6 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
+                <div className="flex justify-between items-center mb-5">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900">Analytics</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">Revenue trends & status breakdown</p>
+                  </div>
+                  <button className="text-xs text-blue-500 font-medium hover:text-blue-600 transition-colors cursor-pointer flex items-center gap-1">
+                    See All <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+                <Charts invoices={invoices} />
+              </div>
+
+              {/* Summary Card - spans 2 cols (right side) */}
               <div className="lg:col-span-2 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-bold text-gray-900">Summary</h3>
@@ -684,20 +702,6 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Charts + Analytics Section */}
-            <div className="bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
-              <div className="flex justify-between items-center mb-5">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900">Analytics</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">Revenue trends & status breakdown</p>
-                </div>
-                <button className="text-xs text-blue-500 font-medium hover:text-blue-600 transition-colors cursor-pointer flex items-center gap-1">
-                  See All <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-              <Charts invoices={invoices} />
             </div>
 
             {/* Invoice Ledger Table */}
