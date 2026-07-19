@@ -12,7 +12,7 @@ import {
   LedgerEntry,
 } from '../lib/ledger';
 import { getInvoices } from '../lib/supabase';
-import { Invoice } from '../types';
+import { Invoice, PaymentRecord } from '../types';
 import {
   PlusCircle,
   X,
@@ -90,11 +90,30 @@ export default function Ledger() {
   const fetchInvoicesForDate = async (date: string) => {
     try {
       const invoices = await getInvoices();
-      // Show invoices where payment_date matches the selected date (regardless of status)
-      const matchingInvoices = invoices.filter((inv) => {
-        const invPaymentDate = inv.paymentDate || '';
-        return invPaymentDate === date;
-      });
+      // Build a list of invoices that have at least one payment on the selected date.
+      // For each matching invoice, override totalAmount to show ONLY the sum of
+      // payments made on that specific date (not the full invoice total).
+      const matchingInvoices: Invoice[] = [];
+
+      for (const inv of invoices) {
+        const paymentsArray: PaymentRecord[] = inv.payments || [];
+
+        if (paymentsArray.length > 0) {
+          // Sum only payments whose date matches the selected ledger date
+          const datePayments = paymentsArray.filter((p) => p.date === date);
+          if (datePayments.length > 0) {
+            const dateTotal = datePayments.reduce((sum, p) => sum + p.amount, 0);
+            // Create a copy with totalAmount reflecting only this date's payments
+            matchingInvoices.push({ ...inv, totalAmount: dateTotal });
+          }
+        } else {
+          // Fallback for invoices without a payments array: use legacy paymentDate field
+          if (inv.paymentDate === date) {
+            matchingInvoices.push(inv);
+          }
+        }
+      }
+
       // Sort by invoice ID ascending (1, 2, 3, 4...)
       matchingInvoices.sort((a, b) => {
         const numA = parseInt(a.id.replace(/\D/g, '')) || 0;
@@ -134,17 +153,21 @@ export default function Ledger() {
     setSaving(true);
     setError(null);
     try {
-      // Check for duplicate invoice numbers - get existing ledger invoice IDs
+      // Check for duplicate entries - build a set of existing ledger invoice IDs
       const existingIds = new Set(allInvoices.map((inv) => String(inv.id)));
 
       // Save invoices as ledger_invoices (skip duplicates)
+      // Note: todayInvoices already has totalAmount adjusted to only the
+      // payment amount for the selected date (not the full invoice total).
       for (const inv of todayInvoices) {
-        // Check if this invoice ID already exists in ledger
-        if (existingIds.has(String(inv.id))) {
+        // Build a unique key combining invoice ID and selected date to allow
+        // the same invoice to appear in multiple ledger dates for different payments.
+        const ledgerKey = `${inv.id}_${selectedDate}`;
+        if (existingIds.has(ledgerKey)) {
           continue; // Skip duplicate
         }
         await createLedgerInvoice({
-          id: inv.id,
+          id: ledgerKey,
           guest_name: inv.customerName,
           hotel_name: inv.hotelName || '',
           total_amount: inv.totalAmount,
@@ -173,7 +196,7 @@ export default function Ledger() {
     }
   };
 
-  const handleDeleteLedgerInvoice = async (id: number) => {
+  const handleDeleteLedgerInvoice = async (id: string) => {
     try {
       await deleteLedgerInvoice(id);
       await fetchLedgerData();
