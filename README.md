@@ -20,7 +20,9 @@ View your app in AI Studio: https://ai.studio/apps/6976875f-df0d-42c3-971b-becd6
    `npm run dev`
 
 
-SUPABASE_URL=https://jybjzbtgpnhkdyofayji.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_FDeECQfWSc89GcQVAUAhyA_QuEfE4AY
-SUPABASE_SECRET_KEY=your-secret-key
-SUPABASE_JWKS_URL=https://jybjzbtgpnhkdyofayji.supabase.co/auth/v1/.well-known/jwks.json
+# Supabase Connection Keys (Server-Side Secure)
+SUPABASE_URL="https://jybjzbtgpnhkdyofayji.supabase.co"
+SUPABASE_SECRET_KEY="sb_secret_UIkjVs1M3xJP2EgPXqRjdw_zC88aiJg"
+SUPABASE_PUBLISHABLE_KEY="sb_publishable_FDeECQfWSc89GcQVAUAhyA_QuEfE4AY"
+SUPABASE_JWKS_URL="https://jybjzbtgpnhkdyofayji.supabase.co/auth/v1/.well-known/jwks.json"
+
