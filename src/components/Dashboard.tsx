@@ -770,7 +770,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
         {/* Ledger */}
         {viewState === 'ledger' && (
-          <Ledger />
+          <Ledger template={invoiceTemplate} />
         )}
 
         {/* Settings */}
