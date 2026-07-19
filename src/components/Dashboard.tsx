@@ -444,10 +444,10 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         {/* Dashboard View */}
         {viewState === 'dashboard' && (
           <div className="space-y-8 animate-fade-in" id="main-dashboard-panels">
-            {/* Hero Row: Total Revenue (wider) + Recent Activity + Collection Health */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start" id="hero-row">
-              {/* Total Revenue Card - Wider (spans 2 cols) */}
-              <div className="lg:col-span-2 bg-white p-8 rounded-3xl shadow-md shadow-gray-200/60">
+            {/* Hero Row: Total Revenue (wider) + Recent Activity + Today Collection */}
+            <div className="grid grid-cols-1 lg:grid-cols-8 gap-6 items-start" id="hero-row">
+              {/* Total Revenue Card - Widest (spans 4 of 8 cols) */}
+              <div className="lg:col-span-4 bg-white p-8 rounded-3xl shadow-md shadow-gray-200/60">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Revenue</span>
                 <div className="mt-3 flex items-baseline gap-1">
                   <span className="text-5xl font-black text-gray-900 tracking-tight">
@@ -502,7 +502,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 </div>
               </div>
 
-              {/* Recent Activity Panel */}
+              {/* Recent Activity Panel - Narrower */}
               <div className="lg:col-span-2 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
                 <div className="flex justify-between items-center mb-5">
                   <h3 className="text-lg font-bold text-gray-900">Recent Activity</h3>
@@ -553,7 +553,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               </div>
 
               {/* Today Collection Card */}
-              <div className="lg:col-span-1 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
+              <div className="lg:col-span-2 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-bold text-gray-900">Today Collection</h3>
                   <TrendingUp className="w-4 h-4 text-gray-300" />
@@ -586,10 +586,10 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               </div>
             </div>
 
-            {/* Quick Actions + Collection Health Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Quick Actions */}
-              <div className="bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
+            {/* Collection Health + Quick Actions Row - Same 8-col grid as hero */}
+            <div className="grid grid-cols-1 lg:grid-cols-8 gap-6 items-start">
+              {/* Quick Actions - spans 4 cols (first column) */}
+              <div className="lg:col-span-4 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
                 <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -622,15 +622,15 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 </div>
               </div>
 
-              {/* Collection Health Gauge */}
-              <div className="bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
+              {/* Collection Health Gauge - spans 2 cols (second column) */}
+              <div className="lg:col-span-2 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-bold text-gray-900">Collection Health</h3>
                   <TrendingUp className="w-4 h-4 text-gray-300" />
                 </div>
 
                 <div className="flex-1 flex flex-col items-center justify-center py-4">
-                  <svg viewBox="0 0 200 120" className="w-full max-w-[220px]">
+                  <svg viewBox="0 0 200 120" className="w-full max-w-[180px]">
                     <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="16" strokeLinecap="round" />
                     <path
                       d="M 20 110 A 80 80 0 0 1 180 110"
@@ -643,14 +643,46 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                   </svg>
 
                   <div className="text-center -mt-5">
-                    <span className="text-4xl font-black text-gray-900">{collectionRate.toFixed(0)}%</span>
-                    <p className="text-sm font-bold mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
+                    <span className="text-3xl font-black text-gray-900">{collectionRate.toFixed(0)}%</span>
+                    <p className="text-xs font-bold mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
                   </div>
                 </div>
 
-                <p className="text-xs text-gray-400 text-center leading-relaxed mt-auto">
-                  Share of billed revenue collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
+                <p className="text-[10px] text-gray-400 text-center leading-relaxed mt-auto">
+                  Revenue collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
                 </p>
+              </div>
+
+              {/* Empty spacer or additional info - spans 2 cols (third column) */}
+              <div className="lg:col-span-2 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-bold text-gray-900">Summary</h3>
+                  <Receipt className="w-4 h-4 text-gray-300" />
+                </div>
+                <div className="flex-1 space-y-3 mt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-400">Total Invoices</span>
+                    <span className="text-sm font-bold text-gray-800">{invoices.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-400">Paid</span>
+                    <span className="text-sm font-bold text-emerald-600">{invoices.filter(i => i.status === 'Paid').length}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-400">Pending</span>
+                    <span className="text-sm font-bold text-amber-600">{invoices.filter(i => i.status === 'Pending').length}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-400">Overdue</span>
+                    <span className="text-sm font-bold text-rose-600">{overdueCount}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                    <span className="text-xs text-gray-400">Avg Invoice</span>
+                    <span className="text-sm font-bold text-gray-800">
+                      ${invoices.length > 0 ? Math.round(totalRevenue / invoices.length).toLocaleString() : '0'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
