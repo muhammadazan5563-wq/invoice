@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Invoice, BookingItem, PaymentRecord } from '../types';
+import { InvoiceTemplate } from '../lib/settings';
 import { Plus, Trash2, ArrowLeft, Save, Sparkles, Calendar } from 'lucide-react';
 
 interface InvoiceFormProps {
@@ -7,9 +8,10 @@ interface InvoiceFormProps {
   onSave: (invoiceData: Omit<Invoice, 'rowIndex' | 'rawRow'> & { rowIndex?: number }) => Promise<void>;
   onCancel: () => void;
   suggestInvoiceId?: string;
+  template?: InvoiceTemplate | null; // Template settings from Supabase
 }
 
-export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceId }: InvoiceFormProps) {
+export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceId, template }: InvoiceFormProps) {
   const [id, setId] = useState('');
   const [date, setDate] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -27,8 +29,8 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Pre-filled banking details matching the screenshot
-  const defaultNotes = `Beneficiaire Bank of America\nSwift Sort\nAccount No.: 324 6654 7766 9992`;
+  // Use template payment details if available, otherwise use hardcoded default
+  const defaultNotes = template?.paymentDetails || `Beneficiaire Bank of America\nSwift Sort\nAccount No.: 324 6654 7766 9992`;
 
   // Load existing invoice data if in EDIT mode
   useEffect(() => {
@@ -55,21 +57,23 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
       }
       setPayments(initialPayments);
     } else {
-      // Create mode
+      // Create mode - use template defaults from Supabase settings
       const today = new Date().toISOString().split('T')[0];
       setId(suggestInvoiceId || `Z${Math.floor(1 + Math.random() * 99)}`);
       setDate(today);
       setCustomerName('');
       setCustomerEmail('');
-      setHotelName('');
+      setHotelName(template?.defaultHotelName || '');
       setAmountPaid(0);
       setPaymentDate(today);
       setStatus('Due');
-      setNotes(defaultNotes);
+      // Use template payment details or default notes from template
+      const notesValue = template?.paymentDetails || template?.defaultNotes || defaultNotes;
+      setNotes(notesValue);
       setItems([{ roomType: 'AVG 4.5', quantity: 1, checkIn: today, checkOut: getNextDayStr(today), nights: 1, price: 50.00, total: 50.00 }]);
       setPayments([{ amount: 0, date: today }]);
     }
-  }, [invoice, suggestInvoiceId]);
+  }, [invoice, suggestInvoiceId, template]);
 
   function getNextDayStr(dateStr: string): string {
     try {
