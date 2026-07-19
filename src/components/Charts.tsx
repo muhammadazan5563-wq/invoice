@@ -1,4 +1,4 @@
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar, Legend } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 import { Invoice } from '../types';
 
 interface ChartsProps {
@@ -6,23 +6,18 @@ interface ChartsProps {
 }
 
 export default function Charts({ invoices }: ChartsProps) {
-  // 1. Calculate Revenue Over Time (by invoice date)
-  // Let's group by Month-Year
+  // Revenue Over Time grouped by Month-Year
   const monthlyDataMap: { [key: string]: { month: string; revenue: number; count: number } } = {};
   
   invoices.forEach((inv) => {
     if (!inv.date) return;
-    
-    // Parse date (expecting YYYY-MM-DD or standard formats)
     const dateObj = new Date(inv.date);
     if (isNaN(dateObj.getTime())) return;
-    
     const monthYear = dateObj.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
     
     if (!monthlyDataMap[monthYear]) {
       monthlyDataMap[monthYear] = { month: monthYear, revenue: 0, count: 0 };
     }
-    // Only include Paid or Pending/Unpaid (exclude Archived if any)
     if (inv.status !== ('Archived' as any)) {
       monthlyDataMap[monthYear].revenue += inv.totalAmount;
       monthlyDataMap[monthYear].count += 1;
@@ -35,14 +30,8 @@ export default function Charts({ invoices }: ChartsProps) {
     return dateA.getTime() - dateB.getTime();
   });
 
-  // 2. Status Distribution
-  const statusCounts = {
-    Paid: 0,
-    Unpaid: 0,
-    Pending: 0,
-    Overdue: 0,
-  };
-
+  // Status Distribution
+  const statusCounts = { Paid: 0, Unpaid: 0, Pending: 0, Overdue: 0 };
   invoices.forEach((inv) => {
     if (inv.status in statusCounts) {
       statusCounts[inv.status as keyof typeof statusCounts] += inv.totalAmount;
@@ -50,13 +39,13 @@ export default function Charts({ invoices }: ChartsProps) {
   });
 
   const statusData = [
-    { name: 'Paid', value: statusCounts.Paid, color: '#10B981' }, // emerald-500
-    { name: 'Unpaid', value: statusCounts.Unpaid, color: '#EF4444' }, // red-500
-    { name: 'Pending', value: statusCounts.Pending, color: '#F59E0B' }, // amber-500
-    { name: 'Overdue', value: statusCounts.Overdue, color: '#8B5CF6' }, // violet-500
+    { name: 'Paid', value: statusCounts.Paid, color: '#10B981' },
+    { name: 'Unpaid', value: statusCounts.Unpaid, color: '#F43F5E' },
+    { name: 'Pending', value: statusCounts.Pending, color: '#F59E0B' },
+    { name: 'Overdue', value: statusCounts.Overdue, color: '#8B5CF6' },
   ].filter(item => item.value > 0);
 
-  // 3. Top Customers
+  // Top Customers
   const customerMap: { [key: string]: number } = {};
   invoices.forEach((inv) => {
     if (!inv.customerName) return;
@@ -67,20 +56,30 @@ export default function Charts({ invoices }: ChartsProps) {
   const customerData = Object.entries(customerMap)
     .map(([name, total]) => ({ name, revenue: Math.round(total) }))
     .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5); // top 5
+    .slice(0, 5);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
   };
 
+  const CustomTooltipStyle = {
+    background: '#1E293B',
+    borderRadius: '12px',
+    border: 'none',
+    color: '#FFF',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+    padding: '10px 14px',
+    fontSize: '12px'
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" id="invoice-charts-grid">
-      {/* Revenue Trend Area Chart */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm col-span-1 lg:col-span-2" id="chart-revenue-trend">
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Revenue Trend</h3>
-        <div className="h-64">
+      {/* Revenue Trend */}
+      <div className="col-span-1 lg:col-span-2" id="chart-revenue-trend">
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Revenue Trend</h3>
+        <div className="h-56">
           {monthlyData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-slate-400 font-medium">
+            <div className="h-full flex items-center justify-center text-gray-300 font-medium text-sm">
               No revenue data available
             </div>
           ) : (
@@ -88,29 +87,29 @@ export default function Charts({ invoices }: ChartsProps) {
               <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#6366F1" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="#6366F1" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="month" stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
+                <XAxis dataKey="month" stroke="#CBD5E1" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="#CBD5E1" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
                 <Tooltip 
                   formatter={(value: any) => [formatCurrency(value), 'Revenue']}
-                  contentStyle={{ background: '#1E293B', borderRadius: '12px', border: 'none', color: '#FFF' }}
+                  contentStyle={CustomTooltipStyle}
                 />
-                <Area type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
+                <Area type="monotone" dataKey="revenue" stroke="#6366F1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
               </AreaChart>
             </ResponsiveContainer>
           )}
         </div>
       </div>
 
-      {/* Status Breakdown Donut Chart */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm" id="chart-status-breakdown">
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Status Value Distribution</h3>
-        <div className="h-64 relative flex items-center justify-center">
+      {/* Status Donut */}
+      <div id="chart-status-breakdown">
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Status Breakdown</h3>
+        <div className="h-56 relative flex items-center justify-center">
           {statusData.length === 0 ? (
-            <div className="text-slate-400 font-medium">No status data available</div>
+            <div className="text-gray-300 font-medium text-sm">No data</div>
           ) : (
             <>
               <ResponsiveContainer width="100%" height="100%">
@@ -119,8 +118,8 @@ export default function Charts({ invoices }: ChartsProps) {
                     data={statusData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
+                    innerRadius={55}
+                    outerRadius={75}
                     paddingAngle={4}
                     dataKey="value"
                   >
@@ -130,51 +129,50 @@ export default function Charts({ invoices }: ChartsProps) {
                   </Pie>
                   <Tooltip 
                     formatter={(value: any) => [formatCurrency(value), 'Value']}
-                    contentStyle={{ background: '#1E293B', borderRadius: '12px', border: 'none', color: '#FFF' }}
+                    contentStyle={CustomTooltipStyle}
                   />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Custom Legend inside/under the center */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-xs text-slate-400 font-medium uppercase">Total Value</span>
-                <span className="text-xl font-bold text-slate-800">
+                <span className="text-[10px] text-gray-400 font-medium uppercase">Total</span>
+                <span className="text-lg font-bold text-gray-800">
                   {formatCurrency(statusData.reduce((acc, curr) => acc + curr.value, 0))}
                 </span>
               </div>
             </>
           )}
         </div>
-        {/* Simple Legend List */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center mt-2">
+        {/* Legend */}
+        <div className="flex flex-wrap gap-x-3 gap-y-1.5 justify-center mt-3">
           {statusData.map((item) => (
-            <div key={item.name} className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-              {item.name}: {formatCurrency(item.value)}
+            <div key={item.name} className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+              {item.name}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Top Customers Bar Chart */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm col-span-1 lg:col-span-3" id="chart-top-customers">
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">Top Customers by Revenue</h3>
-        <div className="h-64">
+      {/* Top Customers */}
+      <div className="col-span-1 lg:col-span-3" id="chart-top-customers">
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Top Customers</h3>
+        <div className="h-48">
           {customerData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-slate-400 font-medium">
+            <div className="h-full flex items-center justify-center text-gray-300 font-medium text-sm">
               No customer data available
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={customerData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                <XAxis type="number" stroke="#94A3B8" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
+                <XAxis type="number" stroke="#CBD5E1" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
                 <YAxis type="category" dataKey="name" stroke="#64748B" fontSize={11} tickLine={false} axisLine={false} width={100} />
                 <Tooltip 
                   formatter={(value: any) => [formatCurrency(value), 'Revenue']}
-                  contentStyle={{ background: '#1E293B', borderRadius: '12px', border: 'none', color: '#FFF' }}
+                  contentStyle={CustomTooltipStyle}
                 />
-                <Bar dataKey="revenue" fill="#3B82F6" radius={[0, 8, 8, 0]} maxBarSize={30}>
-                  {customerData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index === 0 ? '#10B981' : '#3B82F6'} />
+                <Bar dataKey="revenue" radius={[0, 8, 8, 0]} maxBarSize={28}>
+                  {customerData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={index === 0 ? '#6366F1' : index === 1 ? '#818CF8' : '#C7D2FE'} />
                   ))}
                 </Bar>
               </BarChart>
