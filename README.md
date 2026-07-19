@@ -18,3 +18,9 @@ View your app in AI Studio: https://ai.studio/apps/6976875f-df0d-42c3-971b-becd6
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+
+SUPABASE_URL=https://jybjzbtgpnhkdyofayji.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_FDeECQfWSc89GcQVAUAhyA_QuEfE4AY
+SUPABASE_SECRET_KEY=your-secret-key
+SUPABASE_JWKS_URL=https://jybjzbtgpnhkdyofayji.supabase.co/auth/v1/.well-known/jwks.json
