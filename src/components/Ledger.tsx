@@ -193,7 +193,10 @@ export default function Ledger() {
       await fetchLedgerData();
       if (selectedEntry) {
         const updated = selectedEntry.expenses.filter((exp) => exp.id !== id);
-        setSelectedEntry({ ...selectedEntry, expenses: updated, totalExpense: updated.reduce((s, e) => s + e.amount, 0) });
+        const newTotalReceived = selectedEntry.invoices.reduce((s, i) => s + i.total_amount, 0)
+          + updated.filter((e) => e.tag === 'cash').reduce((s, e) => s + e.amount, 0);
+        const newTotalExpense = updated.filter((e) => e.tag !== 'cash').reduce((s, e) => s + e.amount, 0);
+        setSelectedEntry({ ...selectedEntry, expenses: updated, totalReceived: newTotalReceived, totalExpense: newTotalExpense });
       }
     } catch (err: any) {
       setError(err.message || 'Failed to delete');
@@ -227,12 +230,16 @@ export default function Ledger() {
   };
 
   // Calculate totals
-  const grandTotalReceived = allInvoices.reduce((sum, inv) => sum + inv.total_amount, 0);
-  const grandTotalExpense = allExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  // Cash-tagged entries are added to received, expense-tagged entries are deducted
+  const grandTotalReceived = allInvoices.reduce((sum, inv) => sum + inv.total_amount, 0)
+    + allExpenses.filter((exp) => exp.tag === 'cash').reduce((sum, exp) => sum + exp.amount, 0);
+  const grandTotalExpense = allExpenses.filter((exp) => exp.tag !== 'cash').reduce((sum, exp) => sum + exp.amount, 0);
 
   // Totals for create panel
-  const panelTotalReceived = todayInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
-  const panelTotalExpense = expenseEntries.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+  // Cash-tagged entries add to received, expense-tagged entries add to expense
+  const panelTotalReceived = todayInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
+    + expenseEntries.filter((exp) => exp.tag === 'cash').reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
+  const panelTotalExpense = expenseEntries.filter((exp) => exp.tag !== 'cash').reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
 
   // ============ CREATE VIEW ============
   if (viewMode === 'create') {
@@ -609,14 +616,14 @@ export default function Ledger() {
           </div>
         )}
 
-        {/* Expenses Table */}
-        {selectedEntry.expenses.length > 0 && (
+        {/* Cash Received Table */}
+        {selectedEntry.expenses.filter((exp) => exp.tag === 'cash').length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
-              <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center">
-                <Banknote className="w-4 h-4 text-rose-600" />
+              <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <Banknote className="w-4 h-4 text-emerald-600" />
               </div>
-              <h3 className="text-base font-bold text-slate-800">Expenses ({selectedEntry.expenses.length})</h3>
+              <h3 className="text-base font-bold text-slate-800">Cash Received ({selectedEntry.expenses.filter((exp) => exp.tag === 'cash').length})</h3>
             </div>
             <table className="w-full text-left">
               <thead>
@@ -629,12 +636,59 @@ export default function Ledger() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {selectedEntry.expenses.map((exp) => (
+                {selectedEntry.expenses.filter((exp) => exp.tag === 'cash').map((exp) => (
+                  <tr key={exp.id} className="hover:bg-emerald-50/40 transition-colors">
+                    <td className="py-3.5 px-6 text-sm font-semibold text-slate-700">{exp.name}</td>
+                    <td className="py-3.5 px-6 text-center">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                        Cash
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-6 text-sm text-slate-500">{exp.description || '—'}</td>
+                    <td className="py-3.5 px-6 text-sm font-bold text-emerald-700 text-right">
+                      +${exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-3.5 px-6 text-center">
+                      <button
+                        onClick={() => handleDeleteCashExpense(exp.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Expenses Table */}
+        {selectedEntry.expenses.filter((exp) => exp.tag !== 'cash').length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center">
+                <Banknote className="w-4 h-4 text-rose-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800">Expenses ({selectedEntry.expenses.filter((exp) => exp.tag !== 'cash').length})</h3>
+            </div>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Tag</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-20">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {selectedEntry.expenses.filter((exp) => exp.tag !== 'cash').map((exp) => (
                   <tr key={exp.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3.5 px-6 text-sm font-semibold text-slate-700">{exp.name}</td>
                     <td className="py-3.5 px-6 text-center">
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${exp.tag === 'cash' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {exp.tag === 'cash' ? 'Cash' : 'Expense'}
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-rose-100 text-rose-700">
+                        Expense
                       </span>
                     </td>
                     <td className="py-3.5 px-6 text-sm text-slate-500">{exp.description || '—'}</td>
