@@ -230,7 +230,7 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
 
                       {/* Balance */}
                       <td className={`py-4 px-5 text-right font-bold text-sm ${
-                        inv.balance === 0 ? 'text-emerald-600' : inv.balance < 0 ? 'text-blue-600' : 'text-blue-600'
+                        inv.balance === 0 ? 'text-emerald-600' : inv.balance < 0 ? 'text-blue-600' : 'text-red-600'
                       }`}>
                         {inv.balance < 0
                           ? `-${currencySymbol}${Math.abs(inv.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -535,7 +535,7 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
 
                   {/* Solid Balance Banner */}
                   <div className={`${
-                    selectedInvoice.balance === 0 ? 'bg-emerald-600 shadow-emerald-100' : selectedInvoice.balance < 0 ? 'bg-blue-600 shadow-blue-100' : 'bg-blue-600 shadow-blue-100'
+                    selectedInvoice.balance === 0 ? 'bg-emerald-600 shadow-emerald-100' : selectedInvoice.balance < 0 ? 'bg-blue-600 shadow-blue-100' : 'bg-red-600 shadow-red-100'
                   } text-white p-3.5 rounded-lg flex justify-between items-center font-display shadow-md transition-colors duration-200`}>
                     <span className="font-black italic tracking-wider uppercase text-sm">
                       {selectedInvoice.balance < 0 ? 'CHANGE DUE' : selectedInvoice.balance === 0 ? 'PAID IN FULL' : 'BALANCE'}
