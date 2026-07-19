@@ -444,10 +444,10 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         {/* Dashboard View */}
         {viewState === 'dashboard' && (
           <div className="space-y-8 animate-fade-in" id="main-dashboard-panels">
-            {/* Hero Row: Total Revenue + Recent Activity + Collection Health (3-column like screenshot) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" id="hero-row">
-              {/* Total Revenue Card - Large hero card */}
-              <div className="bg-white p-8 rounded-3xl border border-gray-100">
+            {/* Hero Row: Total Revenue (wider) + Recent Activity + Collection Health */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6" id="hero-row">
+              {/* Total Revenue Card - Wider (spans 2 cols) */}
+              <div className="lg:col-span-2 bg-white p-8 rounded-3xl shadow-md shadow-gray-200/60">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Revenue</span>
                 <div className="mt-3 flex items-baseline gap-1">
                   <span className="text-5xl font-black text-gray-900 tracking-tight">
@@ -466,7 +466,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                   </button>
                   <button
                     onClick={fetchInvoices}
-                    className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 text-sm font-semibold px-5 py-3 rounded-2xl transition-all cursor-pointer"
+                    className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-sm font-semibold px-5 py-3 rounded-2xl transition-all cursor-pointer"
                   >
                     <RefreshCw className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} /> Sync DB
                   </button>
@@ -503,7 +503,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               </div>
 
               {/* Recent Activity Panel */}
-              <div className="bg-white p-7 rounded-3xl border border-gray-100">
+              <div className="lg:col-span-2 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
                 <div className="flex justify-between items-center mb-5">
                   <h3 className="text-lg font-bold text-gray-900">Recent Activity</h3>
                   <span className="text-xs font-bold text-blue-500 uppercase tracking-wider">{invoices.length} total</span>
@@ -516,12 +516,23 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                       <p className="text-xs text-gray-300 mt-1">Create your first one</p>
                     </div>
                   )}
-                  {recentInvoices.map((inv) => {
+                  {recentInvoices.map((inv, idx) => {
                     const chip = statusChip(inv.status);
+                    // Varied avatar colors for visual interest
+                    const avatarColors = [
+                      'bg-blue-100 text-blue-600',
+                      'bg-orange-100 text-orange-600',
+                      'bg-rose-100 text-rose-600',
+                      'bg-emerald-100 text-emerald-600',
+                      'bg-purple-100 text-purple-600',
+                      'bg-amber-100 text-amber-600',
+                      'bg-cyan-100 text-cyan-600',
+                    ];
+                    const avatarColor = avatarColors[idx % avatarColors.length];
                     return (
                       <div key={inv.id} className="flex items-center gap-3 py-2.5">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${chip.bg}`}>
-                          <span className={`text-sm font-bold ${chip.text}`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${avatarColor}`}>
+                          <span className="text-sm font-bold">
                             {inv.customerName.charAt(0).toUpperCase()}
                           </span>
                         </div>
@@ -542,7 +553,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               </div>
 
               {/* Collection Health Gauge */}
-              <div className="bg-white p-7 rounded-3xl border border-gray-100 flex flex-col">
+              <div className="lg:col-span-1 bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60 flex flex-col">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-bold text-gray-900">Collection Health</h3>
                   <TrendingUp className="w-4 h-4 text-gray-300" />
