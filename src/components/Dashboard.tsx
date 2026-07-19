@@ -17,23 +17,15 @@ import InvoiceList from './InvoiceList';
 import InvoiceForm from './InvoiceForm';
 import Settings from './Settings';
 import {
-  Database,
   LogOut,
   RefreshCw,
   PlusCircle,
   CheckCircle,
   AlertCircle,
   Clock,
-  DollarSign,
   Settings as SettingsIcon,
   Receipt,
   TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
-  CreditCard,
-  Send,
-  Download,
-  MoreHorizontal,
   Search,
   Bell,
   ChevronRight
@@ -441,295 +433,147 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         {/* Dashboard View */}
         {viewState === 'dashboard' && (
           <div className="space-y-8 animate-fade-in" id="main-dashboard-panels">
-            {/* Welcome + Quick Actions */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Welcome back{user.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} 👋
-                </h1>
-                <p className="text-sm text-gray-500 mt-1">Here's what's happening with your invoices today.</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={fetchInvoices}
-                  className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 px-4 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} />
-                  Sync
-                </button>
-                <button
-                  onClick={() => { setEditingInvoice(undefined); setViewState('create'); }}
-                  className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-lg shadow-blue-200/50 cursor-pointer"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  New Invoice
-                </button>
-              </div>
-            </div>
-
-            {/* KPI Cards Row - Bankio Style */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" id="kpi-cards">
-              {/* Total Revenue */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-11 h-11 bg-blue-50 rounded-2xl flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 text-blue-500" />
-                  </div>
-                  <span className="flex items-center gap-0.5 text-xs font-medium text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">
-                    <ArrowUpRight className="w-3 h-3" />
-                    12%
+            {/* Hero Row: Total Revenue + Recent Activity + Collection Health (3-column like screenshot) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" id="hero-row">
+              {/* Total Revenue Card - Large hero card */}
+              <div className="bg-white p-8 rounded-3xl border border-gray-100">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Revenue</span>
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span className="text-5xl font-black text-gray-900 tracking-tight">
+                    ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </span>
+                  <span className="text-xl font-bold text-gray-300">.{String(Math.round((totalRevenue % 1) * 100)).padStart(2, '0')}</span>
                 </div>
-                <p className="text-sm text-gray-500 font-medium">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </p>
-              </div>
 
-              {/* Collected */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-11 h-11 bg-emerald-50 rounded-2xl flex items-center justify-center">
-                    <CheckCircle className="w-5 h-5 text-emerald-500" />
-                  </div>
-                  <span className="flex items-center gap-0.5 text-xs font-medium text-emerald-500 bg-emerald-50 px-2 py-1 rounded-lg">
-                    <ArrowUpRight className="w-3 h-3" />
-                    {collectionRate.toFixed(0)}%
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500 font-medium">Collected</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  ${totalPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </p>
-              </div>
-
-              {/* Pending */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-11 h-11 bg-amber-50 rounded-2xl flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <span className="flex items-center gap-0.5 text-xs font-medium text-amber-500 bg-amber-50 px-2 py-1 rounded-lg">
-                    <ArrowDownRight className="w-3 h-3" />
-                    Pending
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500 font-medium">Outstanding</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  ${totalPending.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </p>
-              </div>
-
-              {/* Overdue */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 hover:shadow-lg hover:shadow-gray-100/50 transition-all">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-11 h-11 bg-rose-50 rounded-2xl flex items-center justify-center">
-                    <AlertCircle className="w-5 h-5 text-rose-500" />
-                  </div>
-                  {overdueCount > 0 && (
-                    <span className="flex items-center gap-0.5 text-xs font-medium text-rose-500 bg-rose-50 px-2 py-1 rounded-lg">
-                      <AlertCircle className="w-3 h-3" />
-                      Alert
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-500 font-medium">Overdue</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{overdueCount}</p>
-              </div>
-            </div>
-
-            {/* Main Grid: Charts + Collection Health + Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Charts Section */}
-              <div className="lg:col-span-2 bg-white p-7 rounded-3xl border border-gray-100">
-                <div className="flex justify-between items-center mb-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Analytics</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Revenue trends & breakdown</p>
-                  </div>
-                  <button className="text-xs text-blue-500 font-medium hover:text-blue-600 transition-colors cursor-pointer flex items-center gap-1">
-                    See All <ChevronRight className="w-3 h-3" />
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3 mt-6">
+                  <button
+                    onClick={() => { setEditingInvoice(undefined); setViewState('create'); }}
+                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-3 rounded-2xl transition-all shadow-lg shadow-indigo-200/50 cursor-pointer"
+                  >
+                    <PlusCircle className="w-4 h-4" /> New Invoice
+                  </button>
+                  <button
+                    onClick={fetchInvoices}
+                    className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-600 border border-gray-200 text-sm font-semibold px-5 py-3 rounded-2xl transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingInvoices ? 'animate-spin' : ''}`} /> Sync DB
                   </button>
                 </div>
-                <Charts invoices={invoices} />
-              </div>
 
-              {/* Right Column: Collection Health + Quick Actions */}
-              <div className="space-y-6">
-                {/* Collection Health - Bankio gauge style */}
-                <div className="bg-white p-7 rounded-3xl border border-gray-100">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-gray-900">Collection Health</h3>
-                    <TrendingUp className="w-4 h-4 text-gray-300" />
-                  </div>
-
-                  <div className="flex flex-col items-center py-4">
-                    <svg viewBox="0 0 200 120" className="w-full max-w-[180px]">
-                      <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="14" strokeLinecap="round" />
-                      <path
-                        d="M 20 110 A 80 80 0 0 1 180 110"
-                        fill="none"
-                        stroke={collectionColor}
-                        strokeWidth="14"
-                        strokeLinecap="round"
-                        strokeDasharray={`${(collectionRate / 100) * 251.2} 251.2`}
-                      />
-                    </svg>
-
-                    <div className="text-center -mt-4">
-                      <span className="text-3xl font-bold text-gray-900">{collectionRate.toFixed(0)}%</span>
-                      <p className="text-sm font-medium mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
+                {/* Mini Stats: Collected / Pending / Overdue */}
+                <div className="grid grid-cols-3 gap-3 mt-7">
+                  <div className="bg-emerald-50 rounded-2xl p-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5 text-emerald-600 mb-1">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Collected</span>
                     </div>
+                    <span className="text-lg font-black text-emerald-700">
+                      ${totalPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
                   </div>
-
-                  <p className="text-xs text-gray-400 text-center leading-relaxed">
-                    {invoices.length} invoice{invoices.length === 1 ? '' : 's'} tracked
-                  </p>
-                </div>
-
-                {/* Quick Actions Card */}
-                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-7 rounded-3xl text-white">
-                  <h3 className="text-lg font-bold mb-2">Quick Actions</h3>
-                  <p className="text-blue-100 text-xs mb-5">Manage your invoices faster</p>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => { setEditingInvoice(undefined); setViewState('create'); }}
-                      className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-3 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <Send className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Create</span>
-                    </button>
-                    <button
-                      onClick={fetchInvoices}
-                      className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-3 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <Download className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Sync</span>
-                    </button>
-                    <button
-                      onClick={() => setViewState('settings')}
-                      className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-3 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <SettingsIcon className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Settings</span>
-                    </button>
-                    <button
-                      className="bg-white/15 hover:bg-white/25 backdrop-blur-sm p-3 rounded-2xl flex flex-col items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <CreditCard className="w-5 h-5" />
-                      <span className="text-[11px] font-medium">Reports</span>
-                    </button>
+                  <div className="bg-amber-50 rounded-2xl p-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5 text-amber-600 mb-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Pending</span>
+                    </div>
+                    <span className="text-lg font-black text-amber-600">
+                      ${totalPending.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                  <div className="bg-rose-50 rounded-2xl p-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5 text-rose-600 mb-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Overdue</span>
+                    </div>
+                    <span className="text-lg font-black text-rose-600">{overdueCount}</span>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Recent Activity Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Recent Transactions */}
-              <div className="lg:col-span-2 bg-white p-7 rounded-3xl border border-gray-100">
+              {/* Recent Activity Panel */}
+              <div className="bg-white p-7 rounded-3xl border border-gray-100">
                 <div className="flex justify-between items-center mb-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Recent Activity</h2>
-                    <p className="text-xs text-gray-400 mt-0.5">Latest invoice transactions</p>
-                  </div>
-                  <span className="text-xs font-medium text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg">
-                    {invoices.length} total
-                  </span>
+                  <h3 className="text-lg font-bold text-gray-900">Recent Activity</h3>
+                  <span className="text-xs font-bold text-blue-500 uppercase tracking-wider">{invoices.length} total</span>
                 </div>
 
                 <div className="space-y-1">
                   {recentInvoices.length === 0 && (
-                    <div className="text-center py-12">
-                      <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                        <Receipt className="w-7 h-7 text-gray-300" />
-                      </div>
+                    <div className="text-center py-8">
                       <p className="text-sm text-gray-400 font-medium">No invoices yet</p>
-                      <p className="text-xs text-gray-300 mt-1">Create your first invoice to get started</p>
+                      <p className="text-xs text-gray-300 mt-1">Create your first one</p>
                     </div>
                   )}
                   {recentInvoices.map((inv) => {
                     const chip = statusChip(inv.status);
                     return (
-                      <div key={inv.id} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-gray-50 transition-colors group">
-                        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${chip.bg}`}>
+                      <div key={inv.id} className="flex items-center gap-3 py-2.5">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${chip.bg}`}>
                           <span className={`text-sm font-bold ${chip.text}`}>
                             {inv.customerName.charAt(0).toUpperCase()}
                           </span>
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-gray-800 truncate">{inv.customerName}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{inv.date} · {inv.id}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-gray-900">
-                            ${inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                          </p>
-                          <div className="flex items-center gap-1.5 justify-end mt-0.5">
+                          <div className="flex items-center gap-1.5 mt-0.5">
                             <span className={`w-1.5 h-1.5 rounded-full ${chip.dot}`}></span>
-                            <span className={`text-[11px] font-medium ${chip.text}`}>{inv.status}</span>
+                            <span className="text-xs text-gray-400">{inv.status} · {inv.date}</span>
                           </div>
                         </div>
+                        <span className="text-sm font-bold text-gray-900">
+                          ${inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Invoice Summary Card */}
-              <div className="bg-white p-7 rounded-3xl border border-gray-100">
-                <div className="flex justify-between items-center mb-5">
-                  <h3 className="text-lg font-bold text-gray-900">Summary</h3>
-                  <MoreHorizontal className="w-4 h-4 text-gray-300" />
+              {/* Collection Health Gauge */}
+              <div className="bg-white p-7 rounded-3xl border border-gray-100 flex flex-col">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-bold text-gray-900">Collection Health</h3>
+                  <TrendingUp className="w-4 h-4 text-gray-300" />
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-blue-100 rounded-xl flex items-center justify-center">
-                        <Receipt className="w-4 h-4 text-blue-500" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Total Invoices</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{invoices.length}</span>
-                  </div>
+                <div className="flex-1 flex flex-col items-center justify-center py-4">
+                  <svg viewBox="0 0 200 120" className="w-full max-w-[200px]">
+                    <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="16" strokeLinecap="round" />
+                    <path
+                      d="M 20 110 A 80 80 0 0 1 180 110"
+                      fill="none"
+                      stroke={collectionColor}
+                      strokeWidth="16"
+                      strokeLinecap="round"
+                      strokeDasharray={`${(collectionRate / 100) * 251.2} 251.2`}
+                    />
+                  </svg>
 
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-emerald-100 rounded-xl flex items-center justify-center">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Paid</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">
-                      {invoices.filter(i => i.status === 'Paid').length}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
-                        <Clock className="w-4 h-4 text-amber-500" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Pending</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">
-                      {invoices.filter(i => i.status === 'Pending' || i.status === 'Due').length}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-rose-100 rounded-xl flex items-center justify-center">
-                        <AlertCircle className="w-4 h-4 text-rose-500" />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">Overdue</span>
-                    </div>
-                    <span className="text-sm font-bold text-gray-900">{overdueCount}</span>
+                  <div className="text-center -mt-5">
+                    <span className="text-4xl font-black text-gray-900">{collectionRate.toFixed(0)}%</span>
+                    <p className="text-sm font-bold mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
                   </div>
                 </div>
+
+                <p className="text-xs text-gray-400 text-center leading-relaxed mt-auto">
+                  Share of billed revenue collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
+                </p>
               </div>
+            </div>
+
+            {/* Charts + Analytics Section */}
+            <div className="bg-white p-7 rounded-3xl border border-gray-100">
+              <div className="flex justify-between items-center mb-5">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Analytics</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Revenue trends & status breakdown</p>
+                </div>
+                <button className="text-xs text-blue-500 font-medium hover:text-blue-600 transition-colors cursor-pointer flex items-center gap-1">
+                  See All <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+              <Charts invoices={invoices} />
             </div>
 
             {/* Invoice Ledger Table */}
