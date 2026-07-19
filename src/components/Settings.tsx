@@ -29,11 +29,12 @@ interface SettingsProps {
   user: User;
   token: string;
   onClose: () => void;
+  onSettingsSaved?: () => void; // Callback to refresh parent state after save
 }
 
 type SettingsTab = 'spreadsheet' | 'template';
 
-export default function Settings({ user, token, onClose }: SettingsProps) {
+export default function Settings({ user, token, onClose, onSettingsSaved }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('spreadsheet');
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
@@ -148,6 +149,10 @@ export default function Settings({ user, token, onClose }: SettingsProps) {
       await saveSpreadsheetSettings(user.uid, settings);
       setSaveSuccess('Spreadsheet settings saved!');
       setTimeout(() => setSaveSuccess(null), 3000);
+      // Notify parent to refresh settings
+      if (onSettingsSaved) {
+        onSettingsSaved();
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to save spreadsheet settings');
     } finally {
@@ -173,6 +178,10 @@ export default function Settings({ user, token, onClose }: SettingsProps) {
       await saveInvoiceTemplate(user.uid, template);
       setSaveSuccess('Invoice template saved!');
       setTimeout(() => setSaveSuccess(null), 3000);
+      // Notify parent to refresh template settings
+      if (onSettingsSaved) {
+        onSettingsSaved();
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to save template settings');
     } finally {
