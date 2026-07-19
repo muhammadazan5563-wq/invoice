@@ -128,8 +128,16 @@ export function groupLedgerByDate(invoices: LedgerInvoice[], expenses: CashExpen
   const dateMap = new Map<string, LedgerEntry>();
 
   // Group invoices by date
+  // For composite IDs (format: "invoiceId_YYYY-MM-DD"), extract the date from the ID.
+  // For legacy IDs without a date suffix, fall back to created_at.
   invoices.forEach((inv) => {
-    const date = new Date(inv.created_at).toISOString().split("T")[0];
+    let date: string;
+    const dateMatch = inv.id.match(/_(\d{4}-\d{2}-\d{2})$/);
+    if (dateMatch) {
+      date = dateMatch[1];
+    } else {
+      date = new Date(inv.created_at).toISOString().split("T")[0];
+    }
     if (!dateMap.has(date)) {
       dateMap.set(date, { date, invoices: [], expenses: [], totalReceived: 0, totalExpense: 0 });
     }
