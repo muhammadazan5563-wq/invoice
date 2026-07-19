@@ -169,9 +169,9 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
                   <th className="py-4 px-5">Invoice No</th>
                   <th className="py-4 px-5">Customer / Guest</th>
                   <th className="py-4 px-5">Date</th>
-                  <th className="py-4 px-5 text-right">Total ($)</th>
-                  <th className="py-4 px-5 text-right">Paid ($)</th>
-                  <th className="py-4 px-5 text-right">Balance ($)</th>
+                  <th className="py-4 px-5 text-right">Total ({currencySymbol})</th>
+                  <th className="py-4 px-5 text-right">Paid ({currencySymbol})</th>
+                  <th className="py-4 px-5 text-right">Balance ({currencySymbol})</th>
                   <th className="py-4 px-5 text-center">Status</th>
                   <th className="py-4 px-5 text-center">Actions</th>
                 </tr>
@@ -229,8 +229,12 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
                       </td>
 
                       {/* Balance */}
-                      <td className="py-4 px-5 text-right text-red-600 font-bold text-sm">
-                        {currencySymbol}{inv.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td className={`py-4 px-5 text-right font-bold text-sm ${
+                        inv.balance === 0 ? 'text-emerald-600' : inv.balance < 0 ? 'text-blue-600' : 'text-blue-600'
+                      }`}>
+                        {inv.balance < 0
+                          ? `-${currencySymbol}${Math.abs(inv.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : `${currencySymbol}${inv.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </td>
 
                       {/* Status */}
@@ -529,10 +533,12 @@ export default function InvoiceList({ invoices, onEdit, onDelete, onMarkAsPaid, 
                     </div>
                   </div>
 
-                  {/* Solid Blue Balance Banner (Matches the BALANCE $1000.00 banner in the screenshot) */}
-                  <div className={`${selectedInvoice.balance < 0 ? 'bg-emerald-600 shadow-emerald-100' : 'bg-blue-600 shadow-blue-100'} text-white p-3.5 rounded-lg flex justify-between items-center font-display shadow-md transition-colors duration-200`}>
+                  {/* Solid Balance Banner */}
+                  <div className={`${
+                    selectedInvoice.balance === 0 ? 'bg-emerald-600 shadow-emerald-100' : selectedInvoice.balance < 0 ? 'bg-blue-600 shadow-blue-100' : 'bg-blue-600 shadow-blue-100'
+                  } text-white p-3.5 rounded-lg flex justify-between items-center font-display shadow-md transition-colors duration-200`}>
                     <span className="font-black italic tracking-wider uppercase text-sm">
-                      {selectedInvoice.balance < 0 ? 'CHANGE DUE' : 'BALANCE'}
+                      {selectedInvoice.balance < 0 ? 'CHANGE DUE' : selectedInvoice.balance === 0 ? 'PAID IN FULL' : 'BALANCE'}
                     </span>
                     <span className="text-xl font-black tracking-widest font-mono">
                       {selectedInvoice.balance < 0
