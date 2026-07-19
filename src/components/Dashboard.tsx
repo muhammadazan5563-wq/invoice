@@ -263,14 +263,25 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
+  // Rotating avatar colors for variety (like in the screenshot)
+  const avatarColors = [
+    { bg: 'bg-purple-100', text: 'text-purple-600' },
+    { bg: 'bg-rose-100', text: 'text-rose-600' },
+    { bg: 'bg-yellow-100', text: 'text-yellow-600' },
+    { bg: 'bg-blue-100', text: 'text-blue-600' },
+    { bg: 'bg-teal-100', text: 'text-teal-600' },
+  ];
+
+  const getAvatarColor = (index: number) => avatarColors[index % avatarColors.length];
+
   const statusChip = (status: string) => {
     switch (status) {
       case 'Paid':
-        return { bg: 'bg-emerald-50', text: 'text-emerald-600', dot: 'bg-emerald-400' };
+        return { dot: 'bg-emerald-500', text: 'text-emerald-600' };
       case 'Overdue':
-        return { bg: 'bg-rose-50', text: 'text-rose-600', dot: 'bg-rose-400' };
+        return { dot: 'bg-rose-500', text: 'text-rose-600' };
       default:
-        return { bg: 'bg-amber-50', text: 'text-amber-600', dot: 'bg-amber-400' };
+        return { dot: 'bg-orange-400', text: 'text-orange-600' };
     }
   };
 
