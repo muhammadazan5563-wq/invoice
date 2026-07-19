@@ -443,6 +443,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 }}
                 onDelete={handleDeleteInvoice}
                 onMarkAsPaid={handleMarkAsPaid}
+                template={invoiceTemplate}
               />
             </div>
           </div>
