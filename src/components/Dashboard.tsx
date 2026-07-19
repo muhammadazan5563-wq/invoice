@@ -27,7 +27,6 @@ import {
   DollarSign,
   CloudLightning,
   Settings as SettingsIcon,
-  Receipt,
   TrendingUp
 } from 'lucide-react';
 
@@ -35,6 +34,47 @@ interface DashboardProps {
   user: User;
   token: string;
   onLogout: () => Promise<void>;
+}
+
+// Deterministic avatar color per customer name, so the same guest always
+// gets the same chip color across sessions (not random, not repeated blue).
+const AVATAR_PALETTE = [
+  { bg: 'bg-indigo-100', text: 'text-indigo-700' },
+  { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+  { bg: 'bg-amber-100', text: 'text-amber-700' },
+  { bg: 'bg-rose-100', text: 'text-rose-700' },
+  { bg: 'bg-sky-100', text: 'text-sky-700' },
+  { bg: 'bg-violet-100', text: 'text-violet-700' },
+];
+
+function avatarFor(name: string) {
+  const clean = (name || '?').trim();
+  const initials = clean
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || '')
+    .join('') || '?';
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
+  const palette = AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+  return { initials, ...palette };
+}
+
+const STATUS_STYLE: Record<Invoice['status'], { chipBg: string; chipText: string; amountText: string; dot: string }> = {
+  Paid: { chipBg: 'bg-emerald-50', chipText: 'text-emerald-600', amountText: 'text-emerald-600', dot: '#10b981' },
+  Due: { chipBg: 'bg-amber-50', chipText: 'text-amber-600', amountText: 'text-amber-600', dot: '#f59e0b' },
+  Pending: { chipBg: 'bg-amber-50', chipText: 'text-amber-600', amountText: 'text-amber-600', dot: '#f59e0b' },
+  Unpaid: { chipBg: 'bg-rose-50', chipText: 'text-rose-600', amountText: 'text-rose-600', dot: '#f43f5e' },
+  Overdue: { chipBg: 'bg-violet-50', chipText: 'text-violet-600', amountText: 'text-violet-600', dot: '#8b5cf6' },
+};
+
+// Splits a currency total into integer + 2dp fraction, comma-formatted, so the
+// big hero number and its trailing decimal always agree with each other.
+function splitCurrency(value: number) {
+  const fixed = value.toFixed(2);
+  const [whole, frac] = fixed.split('.');
+  const formattedWhole = Number(whole).toLocaleString('en-US');
+  return { whole: formattedWhole, frac };
 }
 
 export default function Dashboard({ user, token, onLogout }: DashboardProps) {
@@ -261,6 +301,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
   };
 
   const { totalRevenue, totalPaid, totalPending, overdueCount } = calculateKPIs();
+  const revenueSplit = splitCurrency(totalRevenue);
 
   // Collection health: what % of billed revenue has actually been collected.
   // Drives the gauge in the "Collection Health" card, and its color band.
@@ -269,22 +310,13 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     collectionRate >= 85 ? 'Excellent' : collectionRate >= 60 ? 'Healthy' : collectionRate >= 35 ? 'Watch' : 'At Risk';
   const collectionColor =
     collectionRate >= 85 ? '#10b981' : collectionRate >= 60 ? '#34d399' : collectionRate >= 35 ? '#f59e0b' : '#f43f5e';
+  const gaugeCircumference = 251.2; // half-circle path length, matches the SVG path below
+  const gaugeDash = (collectionRate / 100) * gaugeCircumference;
 
   // Recent invoices, newest first, for the "Recent Activity" panel
   const recentInvoices = [...invoices]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
-
-  const statusChip = (status: string) => {
-    switch (status) {
-      case 'Paid':
-        return { bg: 'bg-emerald-50', text: 'text-emerald-600', icon: <CheckCircle className="w-4 h-4" /> };
-      case 'Overdue':
-        return { bg: 'bg-rose-50', text: 'text-rose-600', icon: <AlertCircle className="w-4 h-4" /> };
-      default:
-        return { bg: 'bg-amber-50', text: 'text-amber-600', icon: <Clock className="w-4 h-4" /> };
-    }
-  };
 
   return (
     <div
@@ -381,17 +413,17 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
         {/* VIEW 1: Main Invoices Control Panel Dashboard */}
         {viewState === 'dashboard' && (
-          <div className="space-y-6 animate-fade-in" id="main-dashboard-panels">
-            {/* Hero row: revenue hero + recent activity, Bankio-style 2/1 split */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5" id="hero-row">
+          <div className="space-y-8 animate-fade-in" id="main-dashboard-panels">
+            {/* Hero row: revenue hero (2 cols) + recent activity + collection health, Bankio-style 3-card top row */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 items-start" id="hero-row">
               {/* Hero card: Total Revenue */}
               <div className="lg:col-span-2 bg-white p-7 rounded-3xl border border-white shadow-sm shadow-slate-200/60">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Revenue</span>
                 <div className="mt-2 flex items-baseline gap-1">
                   <span className="text-5xl font-black text-slate-900 tracking-tight">
-                    ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    ${revenueSplit.whole}
                   </span>
-                  <span className="text-lg font-bold text-slate-300">.{String(Math.round((totalRevenue % 1) * 100)).padStart(2, '0')}</span>
+                  <span className="text-lg font-bold text-slate-300">.{revenueSplit.frac}</span>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 mt-6">
@@ -414,7 +446,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                   </button>
                 </div>
 
-                {/* Mini stat strip: Paid / Pending / Overdue, replaces "My cards" */}
+                {/* Mini stat strip: Paid / Pending / Overdue */}
                 <div className="grid grid-cols-3 gap-3 mt-7">
                   <div className="bg-emerald-50 rounded-2xl p-4">
                     <div className="flex items-center gap-1.5 text-emerald-600">
@@ -447,7 +479,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               {/* Recent activity panel */}
               <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-base font-black text-slate-800">Recent Activity</h3>
+                  <h3 className="text-sm font-black text-slate-800">Recent Activity</h3>
                   <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">{invoices.length} total</span>
                 </div>
                 <div className="space-y-1">
@@ -455,17 +487,21 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                     <p className="text-xs text-slate-400 py-6 text-center">No invoices yet. Create your first one.</p>
                   )}
                   {recentInvoices.map((inv) => {
-                    const chip = statusChip(inv.status);
+                    const style = STATUS_STYLE[inv.status] || STATUS_STYLE.Pending;
+                    const avatar = avatarFor(inv.customerName);
                     return (
-                      <div key={inv.id} className="flex items-center gap-3 py-2.5">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${chip.bg} ${chip.text}`}>
-                          {chip.icon}
+                      <div key={`${inv.id}-${inv.rowIndex}`} className="flex items-center gap-3 py-2.5">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-black ${avatar.bg} ${avatar.text}`}>
+                          {avatar.initials}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-bold text-slate-800 truncate">{inv.customerName}</p>
-                          <p className="text-[10px] text-slate-400">{inv.date}</p>
+                          <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: style.dot }} />
+                            {inv.status} · {inv.date}
+                          </p>
                         </div>
-                        <span className={`text-xs font-black ${chip.text}`}>
+                        <span className={`text-xs font-black shrink-0 ${style.amountText}`}>
                           ${inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </span>
                       </div>
@@ -473,26 +509,15 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                   })}
                 </div>
               </div>
-            </div>
-
-            {/* Charts + Collection Health row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-              <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60">
-                <div className="flex justify-between items-center mb-2">
-                  <h2 className="text-base font-black text-slate-800">Real-Time Database Analytics</h2>
-                  <Receipt className="w-4 h-4 text-slate-300" />
-                </div>
-                <Charts invoices={invoices} />
-              </div>
 
               {/* Signature element: Collection Health gauge */}
-              <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60 flex flex-col items-center justify-between">
+              <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60 flex flex-col items-center">
                 <div className="w-full flex justify-between items-center">
-                  <h3 className="text-base font-black text-slate-800">Collection Health</h3>
+                  <h3 className="text-sm font-black text-slate-800">Collection Health</h3>
                   <TrendingUp className="w-4 h-4 text-slate-300" />
                 </div>
 
-                <svg viewBox="0 0 200 120" className="w-full max-w-[220px] mt-2">
+                <svg viewBox="0 0 200 120" className="w-full max-w-[200px] mt-3">
                   <path d="M 20 110 A 80 80 0 0 1 180 110" fill="none" stroke="#f1f5f9" strokeWidth="16" strokeLinecap="round" />
                   <path
                     d="M 20 110 A 80 80 0 0 1 180 110"
@@ -500,23 +525,32 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                     stroke={collectionColor}
                     strokeWidth="16"
                     strokeLinecap="round"
-                    strokeDasharray={`${(collectionRate / 100) * 251.2} 251.2`}
+                    strokeDasharray={`${gaugeDash} ${gaugeCircumference}`}
                   />
                 </svg>
 
-                <div className="text-center -mt-6">
-                  <span className="text-4xl font-black text-slate-900">{collectionRate.toFixed(0)}%</span>
-                  <p className="text-sm font-bold mt-1" style={{ color: collectionColor }}>{collectionLabel}</p>
+                <div className="text-center -mt-8">
+                  <span className="text-3xl font-black text-slate-900">{collectionRate.toFixed(0)}%</span>
+                  <p className="text-xs font-bold mt-0.5" style={{ color: collectionColor }}>{collectionLabel}</p>
                 </div>
 
-                <p className="text-[11px] text-slate-400 text-center mt-4 leading-relaxed">
-                  Share of billed revenue already collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
+                <p className="text-[10px] text-slate-400 text-center mt-3 leading-relaxed">
+                  Share of billed revenue collected across {invoices.length} invoice{invoices.length === 1 ? '' : 's'}.
                 </p>
               </div>
             </div>
 
-            {/* Invoices List Display */}
-            <div className="bg-white p-6 rounded-3xl border border-white shadow-sm shadow-slate-200/60 space-y-4">
+            {/* Analytics — Charts.tsx manages its own card grid, no extra wrapper */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <h2 className="text-base font-black text-slate-800">Real-Time Database Analytics</h2>
+                <DollarSign className="w-4 h-4 text-slate-300" />
+              </div>
+              <Charts invoices={invoices} />
+            </div>
+
+            {/* Invoice Ledger — InvoiceList.tsx manages its own card + table */}
+            <div className="space-y-3">
               <h2 className="text-base font-black text-slate-800">Invoice Ledger</h2>
               <InvoiceList
                 invoices={invoices}
