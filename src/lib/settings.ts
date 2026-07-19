@@ -8,6 +8,7 @@ export interface InvoiceTemplate {
   defaultHotelName: string;
   defaultNotes: string;
   currency: string;
+  timezone: string;
   taxRate: number;
 }
 
@@ -38,8 +39,35 @@ const DEFAULT_TEMPLATE: InvoiceTemplate = {
   defaultHotelName: "",
   defaultNotes: "",
   currency: "USD",
+  timezone: "UTC",
   taxRate: 0,
 };
+
+// Currency symbol mapping
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  PKR: "₨",
+  AED: "د.إ",
+  SAR: "﷼",
+  INR: "₹",
+};
+
+// Get currency symbol from currency code
+export function getCurrencySymbol(currencyCode: string): string {
+  return CURRENCY_SYMBOLS[currencyCode] || currencyCode;
+}
+
+// Format amount with currency symbol
+export function formatCurrency(amount: number, currencyCode: string = "USD", options?: { minimumFractionDigits?: number; maximumFractionDigits?: number }): string {
+  const symbol = getCurrencySymbol(currencyCode);
+  const formatted = amount.toLocaleString(undefined, {
+    minimumFractionDigits: options?.minimumFractionDigits ?? 2,
+    maximumFractionDigits: options?.maximumFractionDigits ?? 2,
+  });
+  return `${symbol}${formatted}`;
+}
 
 const DEFAULT_SPREADSHEET: SpreadsheetSettings = {
   spreadsheetId: "",
