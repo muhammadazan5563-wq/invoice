@@ -157,6 +157,71 @@ app.delete("/api/invoices/:id", async (req, res) => {
   }
 });
 
+// GET /api/settings/:uid - Get user settings
+app.get("/api/settings/:uid", async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const { data, error } = await supabase
+      .from("user_settings")
+      .select("*")
+      .eq("firebase_uid", uid)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
+
+    res.json(data || null);
+  } catch (error: any) {
+    console.error("Error in GET /api/settings:", error);
+    res.status(500).json({ error: error.message || "Failed to fetch settings" });
+  }
+});
+
+// POST /api/settings - Save user settings
+app.post("/api/settings", async (req, res) => {
+  try {
+    const settings = req.body;
+    if (!settings.firebase_uid) {
+      return res.status(400).json({ error: "Missing firebase_uid" });
+    }
+
+    // Check if settings exist
+    const { data: existing } = await supabase
+      .from("user_settings")
+      .select("id")
+      .eq("firebase_uid", settings.firebase_uid)
+      .single();
+
+    if (existing) {
+      const { error } = await supabase
+        .from("user_settings")
+        .update({
+          ...settings,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("firebase_uid", settings.firebase_uid);
+
+      if (error) throw error;
+    } else {
+      const { error } = await supabase
+        .from("user_settings")
+        .insert({
+          ...settings,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) throw error;
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Error in POST /api/settings:", error);
+    res.status(500).json({ error: error.message || "Failed to save settings" });
+  }
+});
+
 // Vite Middleware & SPA serving configuration
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
