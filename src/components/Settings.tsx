@@ -57,6 +57,7 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
   const [defaultHotelName, setDefaultHotelName] = useState('');
   const [defaultNotes, setDefaultNotes] = useState('');
   const [currency, setCurrency] = useState('USD');
+  const [timezone, setTimezone] = useState('UTC');
   const [taxRate, setTaxRate] = useState(0);
 
   // Load existing settings
@@ -84,6 +85,7 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
         setDefaultHotelName(tmpl.defaultHotelName);
         setDefaultNotes(tmpl.defaultNotes);
         setCurrency(tmpl.currency);
+        setTimezone(tmpl.timezone || 'UTC');
         setTaxRate(tmpl.taxRate);
       } else {
         // Use defaults
@@ -173,6 +175,7 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
         defaultHotelName: defaultHotelName.trim(),
         defaultNotes: defaultNotes.trim(),
         currency,
+        timezone,
         taxRate,
       };
       await saveInvoiceTemplate(user.uid, template);
@@ -469,6 +472,30 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
                       <option value="AED">AED (د.إ)</option>
                       <option value="SAR">SAR (﷼)</option>
                       <option value="INR">INR (₹)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                      Timezone
+                    </label>
+                    <select
+                      value={timezone}
+                      onChange={(e) => setTimezone(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl px-4 py-3 text-slate-800 focus:outline-none transition-all text-sm"
+                    >
+                      <option value="UTC">UTC (Coordinated Universal Time)</option>
+                      <option value="Asia/Karachi">Asia/Karachi (PKT, UTC+5)</option>
+                      <option value="Asia/Dubai">Asia/Dubai (GST, UTC+4)</option>
+                      <option value="Asia/Riyadh">Asia/Riyadh (AST, UTC+3)</option>
+                      <option value="Asia/Kolkata">Asia/Kolkata (IST, UTC+5:30)</option>
+                      <option value="Europe/London">Europe/London (GMT/BST)</option>
+                      <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                      <option value="America/New_York">America/New_York (EST/EDT)</option>
+                      <option value="America/Chicago">America/Chicago (CST/CDT)</option>
+                      <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                      <option value="Asia/Tokyo">Asia/Tokyo (JST, UTC+9)</option>
+                      <option value="Asia/Shanghai">Asia/Shanghai (CST, UTC+8)</option>
+                      <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
                     </select>
                   </div>
                   <div>
