@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Invoice, BookingItem, PaymentRecord } from '../types';
-import { InvoiceTemplate } from '../lib/settings';
+import { InvoiceTemplate, getCurrencySymbol } from '../lib/settings';
 import { Plus, Trash2, ArrowLeft, Save, Sparkles, Calendar } from 'lucide-react';
 
 interface InvoiceFormProps {
@@ -12,6 +12,9 @@ interface InvoiceFormProps {
 }
 
 export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceId, template }: InvoiceFormProps) {
+  // Get currency symbol from template settings
+  const currencySymbol = getCurrencySymbol(template?.currency || 'USD');
+
   const [id, setId] = useState('');
   const [date, setDate] = useState('');
   const [customerName, setCustomerName] = useState('');
@@ -383,8 +386,8 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
                     <th className="py-3 px-4 text-xs font-bold uppercase tracking-wider text-center">Check-In</th>
                     <th className="py-3 px-4 text-xs font-bold uppercase tracking-wider text-center">Check-Out</th>
                     <th className="py-3 px-4 text-xs font-bold uppercase tracking-wider w-20 text-center">Nights</th>
-                    <th className="py-3 px-4 text-xs font-bold uppercase tracking-wider w-28 text-right">Price ($/Night)</th>
-                    <th className="py-3 px-4 text-xs font-bold uppercase tracking-wider w-28 text-right">Total ($)</th>
+                    <th className="py-3 px-4 text-xs font-bold uppercase tracking-wider w-28 text-right">Price ({currencySymbol}/Night)</th>
+                    <th className="py-3 px-4 text-xs font-bold uppercase tracking-wider w-28 text-right">Total ({currencySymbol})</th>
                     <th className="py-3 px-4 text-xs font-bold uppercase tracking-wider w-10 text-center"></th>
                   </tr>
                 </thead>
@@ -458,7 +461,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
 
                       {/* Total line item amount */}
                       <td className="p-3 text-right font-bold text-slate-800 text-sm pr-4 font-mono">
-                        ${(item.quantity * item.nights * item.price).toFixed(2)}
+                        {currencySymbol}{(item.quantity * item.nights * item.price).toFixed(2)}
                       </td>
 
                       {/* Remove action */}
@@ -537,7 +540,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
 
             {/* Total Gross Amount */}
             <div className="flex items-center justify-between text-sm text-slate-600">
-              <span className="font-semibold text-slate-700">Total Gross Amount ($)</span>
+              <span className="font-semibold text-slate-700">Total Gross Amount ({currencySymbol})</span>
               <input
                 type="number"
                 min="0"
@@ -566,7 +569,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
                 {payments.map((p, idx) => (
                   <div key={idx} className="flex gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm relative">
                     <div className="flex-1">
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Amount Paid ($)</label>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Amount Paid ({currencySymbol})</label>
                       <input
                         type="number"
                         min="0"
@@ -604,7 +607,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
             {/* Total Paid Summary */}
             <div className="flex justify-between items-center text-sm text-slate-600 border-t border-slate-200/60 pt-3">
               <span className="font-bold text-slate-700">Total Amount Paid</span>
-              <span className="font-extrabold text-emerald-600 font-mono text-base">${amountPaid.toFixed(2)}</span>
+              <span className="font-extrabold text-emerald-600 font-mono text-base">{currencySymbol}{amountPaid.toFixed(2)}</span>
             </div>
 
             {/* Custom Blue Banner mimicking the screenshot's BALANCE segment */}
@@ -614,8 +617,8 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
               </span>
               <span className="text-lg font-black font-mono">
                 {subtotal - amountPaid < 0 
-                  ? `-$${Math.abs(subtotal - amountPaid).toFixed(2)}` 
-                  : `$${(subtotal - amountPaid).toFixed(2)}`}
+                  ? `-${currencySymbol}${Math.abs(subtotal - amountPaid).toFixed(2)}` 
+                  : `${currencySymbol}${(subtotal - amountPaid).toFixed(2)}`}
               </span>
             </div>
           </div>
