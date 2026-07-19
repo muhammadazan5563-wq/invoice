@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { initAuth, googleSignIn, logout } from './lib/auth';
+import { saveFirebaseToken } from './lib/settings';
 import Dashboard from './components/Dashboard';
 import { 
   FileSpreadsheet, 
@@ -50,6 +51,17 @@ export default function App() {
       if (result) {
         setUser(result.user);
         setToken(result.accessToken);
+        // Save token to Supabase for session persistence
+        try {
+          await saveFirebaseToken(
+            result.user.uid,
+            result.user.email || '',
+            result.accessToken,
+            ''
+          );
+        } catch (e) {
+          console.warn('Failed to persist token to Supabase:', e);
+        }
       }
     } catch (err) {
       console.error('Login error:', err);
