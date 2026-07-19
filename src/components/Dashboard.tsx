@@ -10,6 +10,7 @@ import {
 import Charts from './Charts';
 import InvoiceList from './InvoiceList';
 import InvoiceForm from './InvoiceForm';
+import Settings from './Settings';
 import { 
   Database,
   LogOut, 
@@ -19,7 +20,8 @@ import {
   AlertCircle, 
   Clock, 
   DollarSign,
-  CloudLightning
+  CloudLightning,
+  Settings as SettingsIcon
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -28,7 +30,7 @@ interface DashboardProps {
   onLogout: () => Promise<void>;
 }
 
-export default function Dashboard({ user, onLogout }: DashboardProps) {
+export default function Dashboard({ user, token, onLogout }: DashboardProps) {
   // Invoices data states
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
@@ -53,8 +55,25 @@ CREATE TABLE IF NOT EXISTS invoices (
   payments JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 
--- 2. Disable Row Level Security (RLS) for simple integration
-ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;`;
+-- 2. Create the user_settings table for session persistence & settings
+CREATE TABLE IF NOT EXISTS user_settings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  firebase_uid TEXT UNIQUE NOT NULL,
+  user_email TEXT,
+  firebase_token TEXT,
+  firebase_refresh_token TEXT,
+  spreadsheet_settings JSONB DEFAULT '{}'::jsonb,
+  invoice_template JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3. Create index on firebase_uid for fast lookups
+CREATE INDEX IF NOT EXISTS idx_user_settings_uid ON user_settings (firebase_uid);
+
+-- 4. Disable Row Level Security (RLS) for simple integration
+ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
+ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(supabaseSqlSchema);
@@ -62,8 +81,8 @@ ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;`;
     setTimeout(() => setCopiedSql(false), 2000);
   };
 
-  // View state: 'dashboard' | 'create' | 'edit'
-  const [viewState, setViewState] = useState<'dashboard' | 'create' | 'edit'>('dashboard');
+  // View state: 'dashboard' | 'create' | 'edit' | 'settings'
+  const [viewState, setViewState] = useState<'dashboard' | 'create' | 'edit' | 'settings'>('dashboard');
   const [editingInvoice, setEditingInvoice] = useState<Invoice | undefined>(undefined);
 
   // Custom Confirmation Modal state to bypass iframe window.confirm blockages
@@ -243,6 +262,13 @@ ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;`;
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
+              onClick={() => setViewState('settings')}
+              className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              <SettingsIcon className="w-3.5 h-3.5" /> Settings
+            </button>
+
+            <button
               onClick={fetchInvoices}
               disabled={loadingInvoices}
               className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer"
@@ -417,6 +443,17 @@ ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;`;
                 setViewState('dashboard');
                 setEditingInvoice(undefined);
               }}
+            />
+          </div>
+        )}
+
+        {/* VIEW 3: Settings Panel */}
+        {viewState === 'settings' && (
+          <div className="animate-fade-in" id="settings-section">
+            <Settings
+              user={user}
+              token={token}
+              onClose={() => setViewState('dashboard')}
             />
           </div>
         )}
