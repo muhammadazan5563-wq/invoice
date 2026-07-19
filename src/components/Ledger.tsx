@@ -29,6 +29,7 @@ import {
   Eye,
   ArrowLeft,
   Plus,
+  Edit3,
 } from 'lucide-react';
 
 export default function Ledger() {
@@ -38,25 +39,22 @@ export default function Ledger() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // View state: 'list' shows all ledgers, 'detail' shows a specific ledger's report
-  const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
+  // View state
+  const [viewMode, setViewMode] = useState<'list' | 'detail' | 'create'>('list');
   const [selectedEntry, setSelectedEntry] = useState<LedgerEntry | null>(null);
 
-  // Create Ledger Panel State
-  const [showCreatePanel, setShowCreatePanel] = useState(false);
+  // Create Ledger State
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todayInvoices, setTodayInvoices] = useState<Invoice[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-
-  // Cash/Expense entries for the current ledger creation
   const [expenseEntries, setExpenseEntries] = useState<{ name: string; amount: string; description: string }[]>([]);
-
-  // New expense form
   const [newExpenseName, setNewExpenseName] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
   const [newExpenseDescription, setNewExpenseDescription] = useState('');
-
   const [saving, setSaving] = useState(false);
+
+  // Delete confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'entry'; date: string } | null>(null);
 
   useEffect(() => {
     fetchLedgerData();
@@ -81,7 +79,7 @@ export default function Ledger() {
   };
 
   const handleOpenCreatePanel = async () => {
-    setShowCreatePanel(true);
+    setViewMode('create');
     setShowExpenseForm(false);
     setExpenseEntries([]);
     setError(null);
@@ -96,6 +94,12 @@ export default function Ledger() {
         const invPaymentDate = inv.paymentDate || '';
         return invPaymentDate === date;
       });
+      // Sort by invoice ID ascending (1, 2, 3, 4...)
+      matchingInvoices.sort((a, b) => {
+        const numA = parseInt(a.id.replace(/\D/g, '')) || 0;
+        const numB = parseInt(b.id.replace(/\D/g, '')) || 0;
+        return numA - numB;
+      });
       setTodayInvoices(matchingInvoices);
     } catch (err: any) {
       setError(err.message || 'Failed to load invoices');
@@ -104,7 +108,7 @@ export default function Ledger() {
 
   const handleDateChange = async (newDate: string) => {
     setSelectedDate(newDate);
-    if (showCreatePanel) {
+    if (viewMode === 'create') {
       await fetchInvoicesForDate(newDate);
     }
   };
@@ -128,13 +132,24 @@ export default function Ledger() {
     setSaving(true);
     setError(null);
     try {
-      // Save invoices as ledger_invoices
+      // Check for duplicate invoice numbers - get existing ledger invoice IDs
+      const existingIds = new Set(allInvoices.map((inv) => String(inv.id)));
+
+      // Save invoices as ledger_invoices (skip duplicates)
       for (const inv of todayInvoices) {
-        await createLedgerInvoice({
-          guest_name: inv.customerName,
-          hotel_name: inv.hotelName || '',
-          total_amount: inv.totalAmount,
-        });
+        // Check if this invoice ID already exists in ledger
+        const alreadyExists = allInvoices.some(
+          (existing) => existing.guest_name === inv.customerName && 
+                        existing.hotel_name === (inv.hotelName || '') && 
+                        existing.total_amount === inv.totalAmount
+        );
+        if (!alreadyExists) {
+          await createLedgerInvoice({
+            guest_name: inv.customerName,
+            hotel_name: inv.hotelName || '',
+            total_amount: inv.totalAmount,
+          });
+        }
       }
 
       // Save expense entries
@@ -146,9 +161,9 @@ export default function Ledger() {
         });
       }
 
-      // Refresh data and close panel
+      // Refresh data and go back to list
       await fetchLedgerData();
-      setShowCreatePanel(false);
+      setViewMode('list');
       setExpenseEntries([]);
       setTodayInvoices([]);
     } catch (err: any) {
@@ -162,6 +177,11 @@ export default function Ledger() {
     try {
       await deleteLedgerInvoice(id);
       await fetchLedgerData();
+      // Update selected entry if in detail view
+      if (selectedEntry) {
+        const updated = selectedEntry.invoices.filter((inv) => inv.id !== id);
+        setSelectedEntry({ ...selectedEntry, invoices: updated, totalReceived: updated.reduce((s, i) => s + i.total_amount, 0) });
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to delete');
     }
@@ -171,8 +191,28 @@ export default function Ledger() {
     try {
       await deleteCashExpense(id);
       await fetchLedgerData();
+      if (selectedEntry) {
+        const updated = selectedEntry.expenses.filter((exp) => exp.id !== id);
+        setSelectedEntry({ ...selectedEntry, expenses: updated, totalExpense: updated.reduce((s, e) => s + e.amount, 0) });
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to delete');
+    }
+  };
+
+  const handleDeleteEntireEntry = async (entry: LedgerEntry) => {
+    try {
+      for (const inv of entry.invoices) {
+        await deleteLedgerInvoice(inv.id);
+      }
+      for (const exp of entry.expenses) {
+        await deleteCashExpense(exp.id);
+      }
+      await fetchLedgerData();
+      setDeleteConfirm(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete entry');
+      setDeleteConfirm(null);
     }
   };
 
@@ -194,288 +234,396 @@ export default function Ledger() {
   const panelTotalReceived = todayInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
   const panelTotalExpense = expenseEntries.reduce((sum, exp) => sum + (Number(exp.amount) || 0), 0);
 
-  // Detail view
+  // ============ CREATE VIEW ============
+  if (viewMode === 'create') {
+    return (
+      <div className="min-h-screen -mx-8 -mt-8 -mb-8 bg-white" id="ledger-create-section">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-900 to-indigo-900 text-white px-8 py-6">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setViewMode('list')}
+                className="p-2 hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold">Create Ledger Entry</h1>
+                <p className="text-sm text-indigo-200 mt-0.5">Record daily income and expenses</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-white/10 rounded-xl px-4 py-2.5 border border-white/20">
+                <Calendar className="w-4 h-4 text-indigo-200" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="bg-transparent text-sm text-white focus:outline-none cursor-pointer [color-scheme:dark]"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="max-w-7xl mx-auto px-8 py-8 space-y-8">
+          {error && (
+            <div className="bg-rose-50 text-rose-700 border border-rose-200 p-4 rounded-xl text-sm font-medium flex gap-3 items-center">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
+
+          {/* Payment Received Section */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                  <Receipt className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Payment Received</h2>
+                  <p className="text-xs text-gray-500">Invoices with payment date: {selectedDate}</p>
+                </div>
+              </div>
+              <span className="bg-emerald-100 text-emerald-800 text-sm font-bold px-4 py-1.5 rounded-full">
+                {todayInvoices.length} invoice{todayInvoices.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {todayInvoices.length === 0 ? (
+              <div className="bg-slate-50 rounded-2xl p-10 text-center border-2 border-dashed border-slate-200">
+                <Receipt className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-base text-slate-500 font-medium">No invoices found for this date</p>
+                <p className="text-sm text-slate-400 mt-1">Try selecting a different date using the date picker above</p>
+              </div>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice #</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Guest Name</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Hotel Name</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Total Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {todayInvoices.map((inv, idx) => (
+                      <tr key={idx} className="hover:bg-emerald-50/40 transition-colors">
+                        <td className="py-4 px-6">
+                          <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">#{inv.id}</span>
+                        </td>
+                        <td className="py-4 px-6 text-sm font-semibold text-slate-800">{inv.customerName}</td>
+                        <td className="py-4 px-6 text-sm text-slate-600">{inv.hotelName || '—'}</td>
+                        <td className="py-4 px-6 text-right">
+                          <span className="text-sm font-bold text-emerald-700">${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Cash & Expense Section */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center">
+                  <Banknote className="w-5 h-5 text-rose-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Cash & Expense</h2>
+                  <p className="text-xs text-gray-500">Add expense entries for today</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowExpenseForm(!showExpenseForm)}
+                className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Cash & Expense
+              </button>
+            </div>
+
+            {/* Add Expense Form */}
+            {showExpenseForm && (
+              <div className="bg-slate-50 rounded-2xl p-6 mb-4 border border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Fuel, Food, Rent"
+                      value={newExpenseName}
+                      onChange={(e) => setNewExpenseName(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">Amount *</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      value={newExpenseAmount}
+                      onChange={(e) => setNewExpenseAmount(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 block">Description</label>
+                    <input
+                      type="text"
+                      placeholder="Optional details"
+                      value={newExpenseDescription}
+                      onChange={(e) => setNewExpenseDescription(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <button
+                    onClick={handleAddExpenseEntry}
+                    disabled={!newExpenseName.trim() || !newExpenseAmount.trim()}
+                    className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-bold px-5 py-3 rounded-xl transition-all cursor-pointer"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Expense Entries Table */}
+            {expenseEntries.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-20">Remove</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {expenseEntries.map((entry, idx) => (
+                      <tr key={idx} className="hover:bg-rose-50/40 transition-colors">
+                        <td className="py-4 px-6 text-sm font-semibold text-slate-800">{entry.name}</td>
+                        <td className="py-4 px-6 text-right">
+                          <span className="text-sm font-bold text-rose-700">${Number(entry.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </td>
+                        <td className="py-4 px-6 text-sm text-slate-500">{entry.description || '—'}</td>
+                        <td className="py-4 px-6 text-center">
+                          <button
+                            onClick={() => handleRemoveExpenseEntry(idx)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {expenseEntries.length === 0 && !showExpenseForm && (
+              <div className="bg-slate-50 rounded-2xl p-8 text-center border-2 border-dashed border-slate-200">
+                <Banknote className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-500 font-medium">No expenses added yet</p>
+                <p className="text-xs text-slate-400 mt-1">Click "Add Cash & Expense" to add entries</p>
+              </div>
+            )}
+          </section>
+
+          {/* Totals Summary */}
+          <section className="bg-gradient-to-br from-slate-900 to-indigo-900 rounded-2xl p-8 text-white">
+            <div className="grid grid-cols-3 gap-8">
+              <div className="text-center">
+                <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider block mb-2">Total Amount Received</span>
+                <span className="text-3xl font-black text-emerald-400">
+                  ${panelTotalReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="text-center">
+                <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider block mb-2">Total Expense</span>
+                <span className="text-3xl font-black text-rose-400">
+                  ${panelTotalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="text-center">
+                <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider block mb-2">Net Balance</span>
+                <span className={`text-3xl font-black ${(panelTotalReceived - panelTotalExpense) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  ${(panelTotalReceived - panelTotalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-4 pb-8">
+            <button
+              onClick={() => setViewMode('list')}
+              className="px-8 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveLedger}
+              disabled={saving || (todayInvoices.length === 0 && expenseEntries.length === 0)}
+              className="flex items-center gap-2 px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-300/30 cursor-pointer"
+            >
+              {saving ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <BookOpen className="w-4 h-4" />
+                  Save Ledger
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ============ DETAIL VIEW ============
   if (viewMode === 'detail' && selectedEntry) {
     return (
       <div className="space-y-6 animate-fade-in" id="ledger-detail-section">
-        {/* Back Button */}
         <button
           onClick={handleBackToList}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors cursor-pointer"
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 text-sm font-semibold transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to Ledger List
         </button>
 
         {/* Report Header */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="bg-gradient-to-br from-slate-900 to-indigo-900 rounded-2xl p-8 text-white">
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-indigo-600" />
-                Ledger Report - {selectedEntry.date}
+              <h2 className="text-xl font-bold flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-indigo-300" />
+                Ledger Report — {selectedEntry.date}
               </h2>
-              <p className="text-sm text-gray-500 mt-1">Daily income and expense breakdown</p>
+              <p className="text-sm text-indigo-200 mt-1">Daily income and expense breakdown</p>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <span className="text-xs font-bold text-gray-400 uppercase">Net</span>
-                <p className={`text-lg font-black ${(selectedEntry.totalReceived - selectedEntry.totalExpense) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  ${(selectedEntry.totalReceived - selectedEntry.totalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
-              </div>
+            <div className="text-right">
+              <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider block">Net Balance</span>
+              <p className={`text-3xl font-black mt-1 ${(selectedEntry.totalReceived - selectedEntry.totalExpense) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                ${(selectedEntry.totalReceived - selectedEntry.totalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </p>
             </div>
           </div>
 
-          {/* Summary Row */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-              <div className="flex items-center gap-2 text-emerald-700 mb-1">
+          <div className="grid grid-cols-2 gap-6 mt-6">
+            <div className="bg-white/10 rounded-xl p-5 backdrop-blur-sm border border-white/10">
+              <div className="flex items-center gap-2 text-emerald-300 mb-2">
                 <TrendingUp className="w-4 h-4" />
                 <span className="text-xs font-bold uppercase tracking-wider">Total Received</span>
               </div>
-              <span className="text-2xl font-black text-emerald-800">
+              <span className="text-2xl font-black text-white">
                 ${selectedEntry.totalReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </span>
             </div>
-            <div className="bg-rose-50 rounded-xl p-4 border border-rose-100">
-              <div className="flex items-center gap-2 text-rose-700 mb-1">
+            <div className="bg-white/10 rounded-xl p-5 backdrop-blur-sm border border-white/10">
+              <div className="flex items-center gap-2 text-rose-300 mb-2">
                 <TrendingDown className="w-4 h-4" />
                 <span className="text-xs font-bold uppercase tracking-wider">Total Expense</span>
               </div>
-              <span className="text-2xl font-black text-rose-800">
+              <span className="text-2xl font-black text-white">
                 ${selectedEntry.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
+        </div>
 
-          {/* Invoices Table */}
-          {selectedEntry.invoices.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+        {/* Invoices Table */}
+        {selectedEntry.invoices.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
                 <Receipt className="w-4 h-4 text-emerald-600" />
-                Income / Invoices ({selectedEntry.invoices.length})
-              </h3>
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                      <th className="py-3 px-4">Invoice #</th>
-                      <th className="py-3 px-4">Guest Name</th>
-                      <th className="py-3 px-4">Hotel Name</th>
-                      <th className="py-3 px-4 text-right">Amount</th>
-                      <th className="py-3 px-4 text-center w-16">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {selectedEntry.invoices.map((inv) => (
-                      <tr key={inv.id} className="hover:bg-gray-50/50">
-                        <td className="py-3 px-4 text-sm font-bold text-indigo-600">#{inv.id}</td>
-                        <td className="py-3 px-4 text-sm font-medium text-gray-700">{inv.guest_name}</td>
-                        <td className="py-3 px-4 text-sm text-gray-600">{inv.hotel_name || '-'}</td>
-                        <td className="py-3 px-4 text-sm font-bold text-emerald-700 text-right">
-                          +${inv.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleDeleteLedgerInvoice(inv.id)}
-                            className="p-1 text-gray-300 hover:text-rose-500 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
+              <h3 className="text-base font-bold text-slate-800">Income / Invoices ({selectedEntry.invoices.length})</h3>
             </div>
-          )}
-
-          {/* Expenses Table */}
-          {selectedEntry.expenses.length > 0 && (
-            <div>
-              <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-rose-600" />
-                Expenses ({selectedEntry.expenses.length})
-              </h3>
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                      <th className="py-3 px-4">Name</th>
-                      <th className="py-3 px-4">Description</th>
-                      <th className="py-3 px-4 text-right">Amount</th>
-                      <th className="py-3 px-4 text-center w-16">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {selectedEntry.expenses.map((exp) => (
-                      <tr key={exp.id} className="hover:bg-gray-50/50">
-                        <td className="py-3 px-4 text-sm font-medium text-gray-700">{exp.name}</td>
-                        <td className="py-3 px-4 text-sm text-gray-500">{exp.description || '-'}</td>
-                        <td className="py-3 px-4 text-sm font-bold text-rose-700 text-right">
-                          -${exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleDeleteCashExpense(exp.id)}
-                            className="p-1 text-gray-300 hover:text-rose-500 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // List view (default)
-  return (
-    <div className="space-y-6 animate-fade-in" id="ledger-section">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <BookOpen className="w-6 h-6 text-indigo-600" />
-            Ledger
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Track daily income and expenses</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => handleDateChange(e.target.value)}
-            className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-indigo-400 transition-colors cursor-pointer"
-          />
-          <button
-            onClick={fetchLedgerData}
-            disabled={loading}
-            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-xl transition-all cursor-pointer"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-          <button
-            onClick={handleOpenCreatePanel}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-200/50 cursor-pointer"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Create Ledger
-          </button>
-        </div>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="bg-rose-50 text-rose-700 border border-rose-100 p-4 rounded-2xl text-sm font-medium flex gap-3 items-start">
-          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-          <p>{error}</p>
-        </div>
-      )}
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-2 text-emerald-600 mb-2">
-            <TrendingUp className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">Total Received</span>
-          </div>
-          <span className="text-2xl font-black text-gray-900">
-            ${grandTotalReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        </div>
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-2 text-rose-600 mb-2">
-            <TrendingDown className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">Total Expense</span>
-          </div>
-          <span className="text-2xl font-black text-gray-900">
-            ${grandTotalExpense.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        </div>
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-2 text-indigo-600 mb-2">
-            <DollarSign className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">Net Balance</span>
-          </div>
-          <span className={`text-2xl font-black ${(grandTotalReceived - grandTotalExpense) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-            ${(grandTotalReceived - grandTotalExpense).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        </div>
-      </div>
-
-      {/* Ledger List Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">All Ledger Entries</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Click "Show Report" to view full details</p>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="p-12 text-center">
-            <div className="w-8 h-8 border-4 border-gray-200 border-t-indigo-500 rounded-full animate-spin mx-auto"></div>
-            <p className="text-sm text-gray-400 mt-3">Loading ledger data...</p>
-          </div>
-        ) : ledgerEntries.length === 0 ? (
-          <div className="p-12 text-center">
-            <BookOpen className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-            <p className="text-sm text-gray-400 font-medium">No ledger entries yet</p>
-            <p className="text-xs text-gray-300 mt-1">Click "Create Ledger" to add your first entry</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3.5 px-5">Date</th>
-                  <th className="py-3.5 px-5">Description</th>
-                  <th className="py-3.5 px-5 text-right">Total Received</th>
-                  <th className="py-3.5 px-5 text-right">Total Expense</th>
-                  <th className="py-3.5 px-5 text-right">Net</th>
-                  <th className="py-3.5 px-5 text-center">Action</th>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice #</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Guest Name</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Hotel Name</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-20">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {ledgerEntries.map((entry) => (
-                  <tr key={entry.date} className="hover:bg-gray-50/70 transition-colors">
-                    <td className="py-4 px-5">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-indigo-500" />
-                        <span className="text-sm font-bold text-gray-800">{entry.date}</span>
-                      </div>
+              <tbody className="divide-y divide-slate-100">
+                {selectedEntry.invoices.map((inv) => (
+                  <tr key={inv.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3.5 px-6">
+                      <span className="text-sm font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">#{inv.id}</span>
                     </td>
-                    <td className="py-4 px-5 text-sm text-gray-600">
-                      {entry.invoices.length} invoice{entry.invoices.length !== 1 ? 's' : ''}, {entry.expenses.length} expense{entry.expenses.length !== 1 ? 's' : ''}
+                    <td className="py-3.5 px-6 text-sm font-semibold text-slate-700">{inv.guest_name}</td>
+                    <td className="py-3.5 px-6 text-sm text-slate-600">{inv.hotel_name || '—'}</td>
+                    <td className="py-3.5 px-6 text-sm font-bold text-emerald-700 text-right">
+                      +${inv.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="py-4 px-5 text-sm font-bold text-emerald-700 text-right">
-                      +${entry.totalReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-4 px-5 text-sm font-bold text-rose-700 text-right">
-                      -${entry.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-4 px-5 text-right">
-                      <span className={`text-sm font-black ${(entry.totalReceived - entry.totalExpense) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        ${(entry.totalReceived - entry.totalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 text-center">
+                    <td className="py-3.5 px-6 text-center">
                       <button
-                        onClick={() => handleShowReport(entry)}
-                        className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-2 rounded-lg transition-all cursor-pointer mx-auto"
+                        onClick={() => handleDeleteLedgerInvoice(inv.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                       >
-                        <Eye className="w-3.5 h-3.5" />
-                        Show Report
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Expenses Table */}
+        {selectedEntry.expenses.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3">
+              <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center">
+                <Banknote className="w-4 h-4 text-rose-600" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800">Expenses ({selectedEntry.expenses.length})</h3>
+            </div>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Amount</th>
+                  <th className="py-3.5 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center w-20">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {selectedEntry.expenses.map((exp) => (
+                  <tr key={exp.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3.5 px-6 text-sm font-semibold text-slate-700">{exp.name}</td>
+                    <td className="py-3.5 px-6 text-sm text-slate-500">{exp.description || '—'}</td>
+                    <td className="py-3.5 px-6 text-sm font-bold text-rose-700 text-right">
+                      -${exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-3.5 px-6 text-center">
+                      <button
+                        onClick={() => handleDeleteCashExpense(exp.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>
@@ -485,240 +633,218 @@ export default function Ledger() {
           </div>
         )}
       </div>
+    );
+  }
 
-      {/* Create Ledger Panel (Full Screen Modal) */}
-      {showCreatePanel && (
-        <div className="fixed inset-0 z-50 bg-white overflow-y-auto animate-fade-in">
-          {/* Full-screen Header */}
-          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setShowCreatePanel(false)}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Create Ledger Entry</h2>
-                <p className="text-sm text-gray-500">
-                  {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
-              </div>
+  // ============ LIST VIEW (Default) ============
+  return (
+    <div className="space-y-6 animate-fade-in" id="ledger-section">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+              <BookOpen className="w-5 h-5 text-indigo-600" />
             </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-indigo-400 transition-colors cursor-pointer"
-              />
-              <button
-                onClick={() => setShowCreatePanel(false)}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
+            Ledger
+          </h1>
+          <p className="text-sm text-slate-500 mt-1 ml-13">Track daily income and expenses</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => handleDateChange(e.target.value)}
+            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer shadow-sm"
+          />
+          <button
+            onClick={fetchLedgerData}
+            disabled={loading}
+            className="flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-sm font-semibold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button
+            onClick={handleOpenCreatePanel}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-200/50 cursor-pointer"
+          >
+            <PlusCircle className="w-4 h-4" />
+            Create Ledger
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="bg-rose-50 text-rose-700 border border-rose-200 p-4 rounded-xl text-sm font-medium flex gap-3 items-center">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <p>{error}</p>
+        </div>
+      )}
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Received</span>
+            <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
             </div>
           </div>
-
-          {/* Full-screen Content */}
-          <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-            {/* Today's Invoices Section */}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Receipt className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-base font-bold text-gray-800">Payment Received</h3>
-                <span className="text-xs bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full font-bold">
-                  {todayInvoices.length} invoice{todayInvoices.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-
-              {todayInvoices.length === 0 ? (
-                <div className="bg-gray-50 rounded-2xl p-8 text-center border border-gray-100">
-                  <Receipt className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                  <p className="text-sm text-gray-400 font-medium">No invoices with payment date matching {selectedDate}</p>
-                  <p className="text-xs text-gray-300 mt-1">Try selecting a different date</p>
-                </div>
-              ) : (
-                <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <th className="py-3.5 px-5">Invoice #</th>
-                        <th className="py-3.5 px-5">Guest Name</th>
-                        <th className="py-3.5 px-5">Hotel Name</th>
-                        <th className="py-3.5 px-5 text-right">Total Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {todayInvoices.map((inv, idx) => (
-                        <tr key={idx} className="hover:bg-emerald-50/30 transition-colors">
-                          <td className="py-3.5 px-5 text-sm font-bold text-indigo-600">#{inv.id}</td>
-                          <td className="py-3.5 px-5 text-sm font-medium text-gray-700">{inv.customerName}</td>
-                          <td className="py-3.5 px-5 text-sm text-gray-600">{inv.hotelName || '-'}</td>
-                          <td className="py-3.5 px-5 text-sm font-bold text-emerald-700 text-right">
-                            ${inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          <span className="text-3xl font-black text-slate-900">
+            ${grandTotalReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Expense</span>
+            <div className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center">
+              <TrendingDown className="w-4 h-4 text-rose-600" />
             </div>
-
-            {/* Cash & Expense Section */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Banknote className="w-5 h-5 text-rose-600" />
-                  <h3 className="text-base font-bold text-gray-800">Cash & Expense</h3>
-                  {expenseEntries.length > 0 && (
-                    <span className="text-xs bg-rose-100 text-rose-700 px-2.5 py-1 rounded-full font-bold">
-                      {expenseEntries.length} entr{expenseEntries.length !== 1 ? 'ies' : 'y'}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => setShowExpenseForm(!showExpenseForm)}
-                  className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Cash & Expense
-                </button>
-              </div>
-
-              {/* Expense Entries Table */}
-              {expenseEntries.length > 0 && (
-                <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm mb-4">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <th className="py-3.5 px-5">Name</th>
-                        <th className="py-3.5 px-5 text-right">Amount</th>
-                        <th className="py-3.5 px-5">Description</th>
-                        <th className="py-3.5 px-5 text-center w-16">Remove</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {expenseEntries.map((entry, idx) => (
-                        <tr key={idx} className="hover:bg-rose-50/30 transition-colors">
-                          <td className="py-3.5 px-5 text-sm font-medium text-gray-700">{entry.name}</td>
-                          <td className="py-3.5 px-5 text-sm font-bold text-rose-700 text-right">
-                            ${Number(entry.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </td>
-                          <td className="py-3.5 px-5 text-sm text-gray-500">{entry.description || '-'}</td>
-                          <td className="py-3.5 px-5 text-center">
-                            <button
-                              onClick={() => handleRemoveExpenseEntry(idx)}
-                              className="p-1.5 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Add Expense Form */}
-              {showExpenseForm && (
-                <div className="bg-gray-50 rounded-2xl p-5 space-y-4 border border-gray-200">
-                  <h4 className="text-sm font-bold text-gray-700">New Expense Entry</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Name</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Fuel, Food, Rent"
-                        value={newExpenseName}
-                        onChange={(e) => setNewExpenseName(e.target.value)}
-                        className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Amount</label>
-                      <input
-                        type="number"
-                        placeholder="0.00"
-                        value={newExpenseAmount}
-                        onChange={(e) => setNewExpenseAmount(e.target.value)}
-                        className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Description</label>
-                      <input
-                        type="text"
-                        placeholder="Optional details"
-                        value={newExpenseDescription}
-                        onChange={(e) => setNewExpenseDescription(e.target.value)}
-                        className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
-                      />
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleAddExpenseEntry}
-                    disabled={!newExpenseName.trim() || !newExpenseAmount.trim()}
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all cursor-pointer"
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    Add Entry
-                  </button>
-                </div>
-              )}
+          </div>
+          <span className="text-3xl font-black text-slate-900">
+            ${grandTotalExpense.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Net Balance</span>
+            <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-4 h-4 text-indigo-600" />
             </div>
+          </div>
+          <span className={`text-3xl font-black ${(grandTotalReceived - grandTotalExpense) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+            ${(grandTotalReceived - grandTotalExpense).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      </div>
 
-            {/* Totals Summary */}
-            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl p-6 border border-indigo-100">
-              <div className="grid grid-cols-3 gap-6">
-                <div className="text-center">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Total Amount Received</span>
-                  <span className="text-2xl font-black text-emerald-700">
-                    ${panelTotalReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="text-center">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Total Expense</span>
-                  <span className="text-2xl font-black text-rose-700">
-                    ${panelTotalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="text-center">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">Net Balance</span>
-                  <span className={`text-2xl font-black ${(panelTotalReceived - panelTotalExpense) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                    ${(panelTotalReceived - panelTotalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              </div>
+      {/* Ledger List Table */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">All Ledger Entries</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Click "Show Report" to view full breakdown</p>
+          </div>
+          <span className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-lg">
+            {ledgerEntries.length} entr{ledgerEntries.length !== 1 ? 'ies' : 'y'}
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="p-16 text-center">
+            <div className="w-10 h-10 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mx-auto"></div>
+            <p className="text-sm text-slate-400 mt-4">Loading ledger data...</p>
+          </div>
+        ) : ledgerEntries.length === 0 ? (
+          <div className="p-16 text-center">
+            <BookOpen className="w-14 h-14 text-slate-200 mx-auto mb-4" />
+            <p className="text-base text-slate-500 font-semibold">No ledger entries yet</p>
+            <p className="text-sm text-slate-400 mt-1">Click "Create Ledger" to add your first entry</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Description</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Total Received</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Total Expense</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Net</th>
+                  <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {ledgerEntries.map((entry) => (
+                  <tr key={entry.date} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
+                          <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                        </div>
+                        <span className="text-sm font-bold text-slate-800">{entry.date}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-sm text-slate-600">
+                      {entry.invoices.length} invoice{entry.invoices.length !== 1 ? 's' : ''}, {entry.expenses.length} expense{entry.expenses.length !== 1 ? 's' : ''}
+                    </td>
+                    <td className="py-4 px-6 text-sm font-bold text-emerald-700 text-right">
+                      +${entry.totalReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-4 px-6 text-sm font-bold text-rose-700 text-right">
+                      -${entry.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <span className={`text-sm font-black ${(entry.totalReceived - entry.totalExpense) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        ${(entry.totalReceived - entry.totalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleShowReport(entry)}
+                          className="flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-2 rounded-lg transition-all cursor-pointer"
+                          title="Show Report"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Report
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedDate(entry.date);
+                            handleOpenCreatePanel();
+                          }}
+                          className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold px-3 py-2 rounded-lg transition-all cursor-pointer"
+                          title="Edit Entry"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm({ type: 'entry', date: entry.date })}
+                          className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold px-3 py-2 rounded-lg transition-all cursor-pointer"
+                          title="Delete Entry"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl p-7 space-y-5">
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-slate-900">Delete Ledger Entry</h3>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Are you sure you want to delete the entire ledger entry for <strong>{deleteConfirm.date}</strong>? This will remove all invoices and expenses for this date. This action cannot be undone.
+              </p>
             </div>
-
-            {/* Save Button */}
-            <div className="flex justify-end gap-3 pb-8">
+            <div className="flex gap-3 justify-end pt-2">
               <button
-                onClick={() => setShowCreatePanel(false)}
-                className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-semibold transition-colors cursor-pointer"
+                onClick={() => setDeleteConfirm(null)}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-sm font-semibold transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSaveLedger}
-                disabled={saving || (todayInvoices.length === 0 && expenseEntries.length === 0)}
-                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-all shadow-lg shadow-indigo-200/50 cursor-pointer"
+                onClick={() => {
+                  const entry = ledgerEntries.find((e) => e.date === deleteConfirm.date);
+                  if (entry) handleDeleteEntireEntry(entry);
+                }}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold transition-all shadow-sm cursor-pointer"
               >
-                {saving ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <BookOpen className="w-4 h-4" />
-                    Save Ledger
-                  </>
-                )}
+                Delete Permanently
               </button>
             </div>
           </div>
