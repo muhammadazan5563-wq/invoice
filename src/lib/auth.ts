@@ -14,6 +14,37 @@ provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 
+const TOKEN_STORAGE_KEY = 'invoice_firebase_token';
+const USER_STORAGE_KEY = 'invoice_firebase_user';
+
+// Store token in localStorage for persistence
+function persistToken(token: string) {
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  } catch (e) {
+    console.warn('Failed to persist token:', e);
+  }
+}
+
+// Get persisted token from localStorage
+function getPersistedToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Clear persisted token
+function clearPersistedToken() {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
+  } catch (e) {
+    console.warn('Failed to clear persisted token:', e);
+  }
+}
+
 // Initialize auth state listener. Call this on app load.
 export const initAuth = (
   onAuthSuccess: (user: User, token: string) => void,
@@ -21,19 +52,39 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      // Check if we already have the token cached. If we don't, we can't do API calls, 
-      // but in most standard firebase logins, signInWithPopup has just cached it.
-      // If we are refreshing the page, we may need them to sign in again to get a fresh token.
+      // First check if we have a cached token from the current session
       if (cachedAccessToken) {
         onAuthSuccess(user, cachedAccessToken);
-      } else {
-        // If they are logged into Firebase but we don't have the cached access token (e.g. on hard reload),
-        // we'll require them to click Sign In again to populate the client-side Google token,
-        // or we can let them know.
-        onAuthFailure();
+        return;
       }
+
+      // Try to get persisted token from localStorage
+      const persistedToken = getPersistedToken();
+      if (persistedToken) {
+        cachedAccessToken = persistedToken;
+        onAuthSuccess(user, persistedToken);
+        return;
+      }
+
+      // If we have a Firebase user but no token, try to get a fresh ID token
+      // This won't give us the Google OAuth access token, but at least keeps the session
+      try {
+        const idToken = await user.getIdToken(true);
+        if (idToken) {
+          cachedAccessToken = idToken;
+          persistToken(idToken);
+          onAuthSuccess(user, idToken);
+          return;
+        }
+      } catch (e) {
+        console.warn('Failed to refresh token:', e);
+      }
+
+      // If all else fails, require re-login
+      onAuthFailure();
     } else {
       cachedAccessToken = null;
+      clearPersistedToken();
       onAuthFailure();
     }
   });
@@ -50,6 +101,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    persistToken(credential.accessToken);
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Sign in error:', error);
@@ -66,4 +118,5 @@ export const getAccessToken = (): string | null => {
 export const logout = async () => {
   await signOut(auth);
   cachedAccessToken = null;
+  clearPersistedToken();
 };
