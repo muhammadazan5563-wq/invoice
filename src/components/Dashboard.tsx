@@ -7,6 +7,11 @@ import {
   updateInvoice, 
   deleteInvoice 
 } from '../lib/supabase';
+import { 
+  InvoiceTemplate, 
+  getUserSettings, 
+  getTemplateWithDefaults 
+} from '../lib/settings';
 import Charts from './Charts';
 import InvoiceList from './InvoiceList';
 import InvoiceForm from './InvoiceForm';
@@ -36,6 +41,9 @@ export default function Dashboard({ user, token, onLogout }: DashboardProps) {
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
+  
+  // Template settings loaded from Supabase
+  const [invoiceTemplate, setInvoiceTemplate] = useState<InvoiceTemplate | null>(null);
 
   const supabaseSqlSchema = `-- 1. Create the invoices table in Supabase
 CREATE TABLE IF NOT EXISTS invoices (
@@ -94,10 +102,22 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     onConfirm: () => void;
   } | null>(null);
 
-  // Load invoices on mount
+  // Load invoices and template settings on mount
   useEffect(() => {
     fetchInvoices();
+    loadTemplateSettings();
   }, []);
+
+  const loadTemplateSettings = async () => {
+    try {
+      const settings = await getUserSettings(user.uid);
+      if (settings && settings.invoice_template) {
+        setInvoiceTemplate(getTemplateWithDefaults(settings.invoice_template));
+      }
+    } catch (err) {
+      console.warn('Failed to load template settings:', err);
+    }
+  };
 
   const fetchInvoices = async () => {
     setLoadingInvoices(true);
@@ -443,6 +463,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 setViewState('dashboard');
                 setEditingInvoice(undefined);
               }}
+              template={invoiceTemplate}
             />
           </div>
         )}
@@ -454,6 +475,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               user={user}
               token={token}
               onClose={() => setViewState('dashboard')}
+              onSettingsSaved={loadTemplateSettings}
             />
           </div>
         )}
