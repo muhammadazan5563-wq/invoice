@@ -585,7 +585,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
             </div>
 
             {/* Charts + Analytics Section */}
-            <div className="bg-white p-7 rounded-3xl border border-gray-100">
+            <div className="bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
               <div className="flex justify-between items-center mb-5">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">Analytics</h2>
@@ -599,7 +599,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
             </div>
 
             {/* Invoice Ledger Table */}
-            <div className="bg-white p-7 rounded-3xl border border-gray-100">
+            <div className="bg-white p-7 rounded-3xl shadow-md shadow-gray-200/60">
               <div className="flex justify-between items-center mb-5">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">Invoice Ledger</h2>
