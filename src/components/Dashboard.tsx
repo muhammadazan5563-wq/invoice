@@ -10,7 +10,8 @@ import {
 import {
   InvoiceTemplate,
   getUserSettings,
-  getTemplateWithDefaults
+  getTemplateWithDefaults,
+  getCurrencySymbol
 } from '../lib/settings';
 import Charts from './Charts';
 import InvoiceList from './InvoiceList';
@@ -255,6 +256,9 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
   const { totalRevenue, totalPaid, totalPending, overdueCount } = calculateKPIs();
 
+  // Get currency symbol from template settings
+  const currencySymbol = getCurrencySymbol(invoiceTemplate?.currency || 'USD');
+
   const collectionRate = totalRevenue > 0 ? Math.min(100, (totalPaid / totalRevenue) * 100) : 0;
   const collectionLabel =
     collectionRate >= 85 ? 'Excellent' : collectionRate >= 60 ? 'Healthy' : collectionRate >= 35 ? 'Watch' : 'At Risk';
@@ -463,7 +467,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Total Revenue</span>
                 <div className="mt-3 flex items-baseline gap-1">
                   <span className="text-5xl font-black text-gray-900 tracking-tight">
-                    ${totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {currencySymbol}{totalRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </span>
                   <span className="text-xl font-bold text-gray-300">.{String(Math.round((totalRevenue % 1) * 100)).padStart(2, '0')}</span>
                 </div>
@@ -492,7 +496,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                       <span className="text-[10px] font-bold uppercase tracking-wider">Collected</span>
                     </div>
                     <span className="text-lg font-black text-emerald-700">
-                      ${totalPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      {currencySymbol}{totalPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </span>
                   </div>
                   <div className="bg-amber-50 rounded-2xl p-4 text-center">
@@ -501,7 +505,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                       <span className="text-[10px] font-bold uppercase tracking-wider">Pending</span>
                     </div>
                     <span className="text-lg font-black text-amber-600">
-                      ${totalPending.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      {currencySymbol}{totalPending.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </span>
                   </div>
                   <div className="bg-rose-50 rounded-2xl p-4 text-center">
@@ -556,7 +560,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                           </div>
                         </div>
                         <span className="text-sm font-bold text-gray-900">
-                          ${inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          {currencySymbol}{inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </span>
                       </div>
                     );
@@ -573,7 +577,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
                 <div className="flex-1 flex flex-col items-center justify-center py-4">
                   <span className="text-4xl font-black text-gray-900">
-                    ${invoices
+                    {currencySymbol}{invoices
                       .filter(inv => inv.status === 'Paid' && inv.paymentDate === new Date().toISOString().split('T')[0])
                       .reduce((sum, inv) => sum + inv.amountPaid, 0)
                       .toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -709,7 +713,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                   <div className="flex justify-between items-center pt-2 border-t border-gray-100">
                     <span className="text-xs text-gray-400">Avg Invoice</span>
                     <span className="text-sm font-bold text-gray-800">
-                      ${invoices.length > 0 ? Math.round(totalRevenue / invoices.length).toLocaleString() : '0'}
+                      {currencySymbol}{invoices.length > 0 ? Math.round(totalRevenue / invoices.length).toLocaleString() : '0'}
                     </span>
                   </div>
                 </div>
