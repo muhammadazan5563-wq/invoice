@@ -3,6 +3,10 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import WebSocket from "ws";
+
+// Polyfill WebSocket for Node.js < 22
+(globalThis as any).WebSocket = WebSocket;
 
 dotenv.config();
 
@@ -22,6 +26,14 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: false
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 0
+    }
+  },
+  global: {
+    headers: {}
   }
 });
 
