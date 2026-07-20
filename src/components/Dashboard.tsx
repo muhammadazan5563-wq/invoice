@@ -5,12 +5,15 @@ import {
   getInvoices,
   createInvoice,
   updateInvoice,
-  deleteInvoice
+  deleteInvoice,
+  syncBookingToSheet
 } from '../lib/supabase';
 import {
   InvoiceTemplate,
+  SpreadsheetSettings,
   getUserSettings,
   getTemplateWithDefaults,
+  getSpreadsheetWithDefaults,
   getCurrencySymbol
 } from '../lib/settings';
 import { getTodayInTimezone } from '../lib/timezone';
@@ -50,6 +53,7 @@ export default function Dashboard({ user, token, onLogout, onTokenRefresh }: Das
   const [currentToken, setCurrentToken] = useState(token);
 
   const [invoiceTemplate, setInvoiceTemplate] = useState<InvoiceTemplate | null>(null);
+  const [spreadsheetSettings, setSpreadsheetSettings] = useState<SpreadsheetSettings | null>(null);
 
   const supabaseSqlSchema = `-- 1. Create the invoices table in Supabase
 CREATE TABLE IF NOT EXISTS invoices (
@@ -114,8 +118,13 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
   const loadTemplateSettings = async () => {
     try {
       const settings = await getUserSettings(user.uid);
-      if (settings && settings.invoice_template) {
-        setInvoiceTemplate(getTemplateWithDefaults(settings.invoice_template));
+      if (settings) {
+        if (settings.invoice_template) {
+          setInvoiceTemplate(getTemplateWithDefaults(settings.invoice_template));
+        }
+        if (settings.spreadsheet_settings) {
+          setSpreadsheetSettings(getSpreadsheetWithDefaults(settings.spreadsheet_settings));
+        }
       }
     } catch (err) {
       console.warn('Failed to load template settings:', err);
@@ -145,6 +154,30 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         } else {
           await createInvoice(invoiceData);
         }
+
+        // Sync room booking details to Google Sheets if spreadsheet is configured
+        if (spreadsheetSettings?.spreadsheetId && spreadsheetSettings?.sheetName && token) {
+          try {
+            await syncBookingToSheet(
+              invoiceData.id,
+              invoiceData.customerName,
+              invoiceData.items.map(item => ({
+                checkIn: item.checkIn,
+                checkOut: item.checkOut,
+                nights: item.nights,
+                quantity: item.quantity,
+                roomType: item.roomType,
+              })),
+              spreadsheetSettings.spreadsheetId,
+              spreadsheetSettings.sheetName,
+              token
+            );
+          } catch (sheetErr: any) {
+            console.warn('Failed to sync booking to Google Sheets:', sheetErr);
+            // Don't block the save - just warn
+          }
+        }
+
         await fetchInvoices();
         setViewState('dashboard');
         setEditingInvoice(undefined);
@@ -158,7 +191,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
     if (viewState === 'edit' && editingInvoice) {
       setConfirmModal({
         title: 'Confirm Booking Update',
-        message: `Are you sure you want to save your changes to invoice #${invoiceData.id}? This will synchronize directly with Supabase.`,
+        message: `Are you sure you want to save your changes to invoice #${invoiceData.id}? This will synchronize directly with Supabase and Google Sheets.`,
         actionLabel: 'Update Booking',
         actionStyle: 'bg-blue-500 hover:bg-blue-600 focus:ring-blue-400',
         onConfirm: () => {
@@ -193,6 +226,29 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
       setLoadingInvoices(true);
       try {
         await updateInvoice(invoice.id, updatedInvoice);
+
+        // Sync room booking details to Google Sheets if spreadsheet is configured
+        if (spreadsheetSettings?.spreadsheetId && spreadsheetSettings?.sheetName && token) {
+          try {
+            await syncBookingToSheet(
+              invoice.id,
+              invoice.customerName,
+              invoice.items.map(item => ({
+                checkIn: item.checkIn,
+                checkOut: item.checkOut,
+                nights: item.nights,
+                quantity: item.quantity,
+                roomType: item.roomType,
+              })),
+              spreadsheetSettings.spreadsheetId,
+              spreadsheetSettings.sheetName,
+              token
+            );
+          } catch (sheetErr: any) {
+            console.warn('Failed to sync booking to Google Sheets:', sheetErr);
+          }
+        }
+
         await fetchInvoices();
       } catch (err: any) {
         setError(`Failed to mark invoice as paid: ${err.message}`);
