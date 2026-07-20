@@ -63,8 +63,8 @@ export function getCurrencySymbol(currencyCode: string): string {
 export function formatCurrency(amount: number, currencyCode: string = "USD", options?: { minimumFractionDigits?: number; maximumFractionDigits?: number }): string {
   const symbol = getCurrencySymbol(currencyCode);
   const formatted = amount.toLocaleString(undefined, {
-    minimumFractionDigits: options?.minimumFractionDigits ?? 2,
-    maximumFractionDigits: options?.maximumFractionDigits ?? 2,
+    minimumFractionDigits: options?.minimumFractionDigits ?? 0,
+    maximumFractionDigits: options?.maximumFractionDigits ?? 0,
   });
   return `${symbol}${formatted}`;
 }
