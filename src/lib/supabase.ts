@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { Invoice } from "../types";
 
-// Client-side environment variables with automatic fallback to user's provided credentials
+// Client-side environment variables with automatic fallback to user's provided credentials.
 const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || "https://jybjzbtgpnhkdyofayji.supabase.co";
 const supabaseKey = (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_FDeECQfWSc89GcQVAUAhyA_QuEfE4AY";
 
