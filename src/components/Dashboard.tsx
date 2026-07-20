@@ -158,7 +158,9 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         // Sync room booking details to Google Sheets if spreadsheet is configured
         if (spreadsheetSettings?.spreadsheetId && spreadsheetSettings?.sheetName && token) {
           try {
-            await syncBookingToSheet(
+            const sheetNameForBooking = spreadsheetSettings.sheetName;
+            console.log('[Dashboard] Syncing booking to sheet:', { spreadsheetId: spreadsheetSettings.spreadsheetId, sheetName: sheetNameForBooking, itemCount: invoiceData.items.length });
+            const syncResult = await syncBookingToSheet(
               invoiceData.id,
               invoiceData.customerName,
               invoiceData.items.map(item => ({
@@ -169,13 +171,16 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 roomType: item.roomType,
               })),
               spreadsheetSettings.spreadsheetId,
-              spreadsheetSettings.sheetName,
+              sheetNameForBooking,
               token
             );
+            console.log('[Dashboard] Booking sync result:', syncResult);
           } catch (sheetErr: any) {
-            console.warn('Failed to sync booking to Google Sheets:', sheetErr);
-            // Don't block the save - just warn
+            console.error('Failed to sync booking to Google Sheets:', sheetErr);
+            setError(`Invoice saved to database, but failed to sync to Google Sheets: ${sheetErr.message}`);
           }
+        } else {
+          console.warn('[Dashboard] Skipping sheet sync - missing settings:', { hasSpreadsheetId: !!spreadsheetSettings?.spreadsheetId, hasSheetName: !!spreadsheetSettings?.sheetName, hasToken: !!token });
         }
 
         await fetchInvoices();
@@ -245,7 +250,8 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
               token
             );
           } catch (sheetErr: any) {
-            console.warn('Failed to sync booking to Google Sheets:', sheetErr);
+            console.error('Failed to sync booking to Google Sheets:', sheetErr);
+            setError(`Invoice updated, but failed to sync to Google Sheets: ${sheetErr.message}`);
           }
         }
 
