@@ -13,6 +13,7 @@ import {
   Building2,
   CreditCard,
   FileText,
+  RefreshCw,
 } from 'lucide-react';
 import {
   InvoiceTemplate,
@@ -24,12 +25,13 @@ import {
   getSpreadsheetWithDefaults,
 } from '../lib/settings';
 import { getSpreadsheetInfo } from '../lib/sheets';
+import { refreshGoogleToken } from '../lib/auth';
 
 interface SettingsProps {
   user: User;
   token: string;
   onClose: () => void;
-  onSettingsSaved?: () => void; // Callback to refresh parent state after save
+  onSettingsSaved?: (newToken?: string) => void; // Callback to refresh parent state after save
 }
 
 type SettingsTab = 'spreadsheet' | 'template';
@@ -40,6 +42,7 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentToken, setCurrentToken] = useState(token);
 
   // Spreadsheet settings
   const [spreadsheetUrl, setSpreadsheetUrl] = useState('');
@@ -64,6 +67,11 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
   useEffect(() => {
     loadSettings();
   }, []);
+
+  // Keep currentToken in sync with prop
+  useEffect(() => {
+    setCurrentToken(token);
+  }, [token]);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -102,8 +110,36 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
     }
   };
 
-  // Verify and fetch spreadsheet info
-  const handleVerifySpreadsheet = async () => {
+  // Helper to get a valid token, refreshing if needed
+  const getValidToken = async (): Promise<string> => {
+    // Try the current token first by making a lightweight validation
+    try {
+      const response = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=' + encodeURIComponent(currentToken));
+      if (response.ok) {
+        const data = await response.json();
+        if (data.scope && data.scope.includes('spreadsheets')) {
+          return currentToken;
+        }
+      }
+    } catch {
+      // Token validation failed, try to refresh
+    }
+
+    // Token is invalid or expired, re-authenticate
+    const newToken = await refreshGoogleToken();
+    if (!newToken) {
+      throw new Error('Failed to authenticate with Google. Please try signing in again.');
+    }
+    setCurrentToken(newToken);
+    // Notify parent about the new token
+    if (onSettingsSaved) {
+      onSettingsSaved(newToken);
+    }
+    return newToken;
+  };
+
+  // Fetch and verify spreadsheet - handles re-auth automatically
+  const handleFetchSpreadsheet = async () => {
     if (!spreadsheetUrl.trim()) {
       setError('Please enter a spreadsheet URL or ID');
       return;
@@ -112,6 +148,8 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
     setVerifying(true);
     setError(null);
     try {
+      const validToken = await getValidToken();
+
       const input = spreadsheetUrl.trim();
       let extractedId = input;
       if (input.includes('docs.google.com/spreadsheets')) {
@@ -121,17 +159,54 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
         }
       }
 
-      const info = await getSpreadsheetInfo(extractedId, token);
+      const info = await getSpreadsheetInfo(extractedId, validToken);
       setSpreadsheetId(info.id);
       setSpreadsheetTitle(info.title);
       setAvailableSheets(info.sheets);
       if (info.sheets.length > 0 && !sheetName) {
         setSheetName(info.sheets[0]);
       }
-      setSaveSuccess('Spreadsheet verified successfully!');
-      setTimeout(() => setSaveSuccess(null), 3000);
+      setSaveSuccess('Spreadsheet fetched successfully! Select a sheet tab below.');
+      setTimeout(() => setSaveSuccess(null), 4000);
     } catch (err: any) {
-      setError(err.message || 'Failed to verify spreadsheet. Make sure you have access.');
+      if (err.message?.includes('authentication') || err.message?.includes('401') || err.message?.includes('403')) {
+        setError('Authentication expired. Attempting to re-authenticate...');
+        // Try one more time with a fresh token
+        try {
+          const freshToken = await refreshGoogleToken();
+          if (freshToken) {
+            setCurrentToken(freshToken);
+            if (onSettingsSaved) {
+              onSettingsSaved(freshToken);
+            }
+            // Retry the fetch
+            const input = spreadsheetUrl.trim();
+            let extractedId = input;
+            if (input.includes('docs.google.com/spreadsheets')) {
+              const matches = input.match(/\/d\/([a-zA-Z0-9-_]+)/);
+              if (matches && matches[1]) {
+                extractedId = matches[1];
+              }
+            }
+            const info = await getSpreadsheetInfo(extractedId, freshToken);
+            setSpreadsheetId(info.id);
+            setSpreadsheetTitle(info.title);
+            setAvailableSheets(info.sheets);
+            if (info.sheets.length > 0 && !sheetName) {
+              setSheetName(info.sheets[0]);
+            }
+            setError(null);
+            setSaveSuccess('Re-authenticated and spreadsheet fetched successfully!');
+            setTimeout(() => setSaveSuccess(null), 4000);
+          } else {
+            setError('Could not re-authenticate. Please log out and log in again.');
+          }
+        } catch (retryErr: any) {
+          setError('Authentication failed. Please log out and log in again to reconnect Google Sheets.');
+        }
+      } else {
+        setError(err.message || 'Failed to fetch spreadsheet. Make sure you have access and the URL is correct.');
+      }
     } finally {
       setVerifying(false);
     }
@@ -139,6 +214,15 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
 
   // Save spreadsheet settings
   const handleSaveSpreadsheet = async () => {
+    if (!spreadsheetId) {
+      setError('Please fetch and verify a spreadsheet first');
+      return;
+    }
+    if (!sheetName) {
+      setError('Please select a sheet tab');
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -149,7 +233,7 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
         lastSynced: new Date().toISOString(),
       };
       await saveSpreadsheetSettings(user.uid, settings);
-      setSaveSuccess('Spreadsheet settings saved!');
+      setSaveSuccess('Spreadsheet settings saved and connected!');
       setTimeout(() => setSaveSuccess(null), 3000);
       // Notify parent to refresh settings
       if (onSettingsSaved) {
@@ -289,7 +373,7 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
                   <Link2 className="w-5 h-5 text-blue-500" /> Connect Google Spreadsheet
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">
-                  Link your Google Sheets spreadsheet to sync invoices. Paste the full URL or just the spreadsheet ID.
+                  Link your Google Sheets spreadsheet to sync invoices. Paste the full URL below and click "Fetch Sheets" to connect.
                 </p>
               </div>
 
@@ -307,13 +391,26 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
                     placeholder="https://docs.google.com/spreadsheets/d/your-spreadsheet-id/edit"
                   />
                   <button
-                    onClick={handleVerifySpreadsheet}
-                    disabled={verifying}
-                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-5 py-3 rounded-xl text-xs font-bold transition-colors"
+                    onClick={handleFetchSpreadsheet}
+                    disabled={verifying || !spreadsheetUrl.trim()}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white px-5 py-3 rounded-xl text-xs font-bold transition-colors shadow-sm"
                   >
-                    {verifying ? 'Verifying...' : 'Verify'}
+                    {verifying ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Fetching...
+                      </>
+                    ) : (
+                      <>
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        Fetch Sheets
+                      </>
+                    )}
                   </button>
                 </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  If your session has expired, clicking "Fetch Sheets" will automatically re-authenticate with Google.
+                </p>
               </div>
 
               {/* Spreadsheet Info */}
@@ -333,7 +430,7 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
                   <select
                     value={sheetName}
                     onChange={(e) => setSheetName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl px-4 py-3 text-slate-800 focus:outline-none transition-all text-sm"
+                    className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 rounded-xl px-4 py-3 text-slate-800 focus:outline-none transition-all text-sm cursor-pointer"
                   >
                     {availableSheets.map((sheet) => (
                       <option key={sheet} value={sheet}>
@@ -341,11 +438,14 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Choose the sheet tab that contains your invoice data.
+                  </p>
                 </div>
               )}
 
-              {/* Manual Sheet Name */}
-              {availableSheets.length === 0 && (
+              {/* Manual Sheet Name (fallback if no sheets fetched) */}
+              {availableSheets.length === 0 && spreadsheetId && (
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                     Sheet Name (Tab)
@@ -364,11 +464,11 @@ export default function Settings({ user, token, onClose, onSettingsSaved }: Sett
               <div className="flex justify-end pt-4 border-t border-slate-100">
                 <button
                   onClick={handleSaveSpreadsheet}
-                  disabled={saving}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-6 py-3 rounded-xl text-sm font-black transition-all shadow-md shadow-blue-100"
+                  disabled={saving || !spreadsheetId || !sheetName}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl text-sm font-black transition-all shadow-md shadow-blue-100"
                 >
                   <Save className="w-4 h-4" />
-                  {saving ? 'Saving...' : 'Save Spreadsheet Settings'}
+                  {saving ? 'Saving...' : 'Save & Connect'}
                 </button>
               </div>
             </div>
