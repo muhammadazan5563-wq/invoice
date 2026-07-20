@@ -13,6 +13,7 @@ import {
 } from '../lib/ledger';
 import { getInvoices } from '../lib/supabase';
 import { InvoiceTemplate, getUserSettings, getTemplateWithDefaults, getCurrencySymbol } from '../lib/settings';
+import { getTodayInTimezone } from '../lib/timezone';
 import { Invoice, PaymentRecord } from '../types';
 import {
   PlusCircle,
@@ -49,8 +50,8 @@ export default function Ledger({ template }: LedgerProps) {
   const [viewMode, setViewMode] = useState<'list' | 'detail' | 'create'>('list');
   const [selectedEntry, setSelectedEntry] = useState<LedgerEntry | null>(null);
 
-  // Create Ledger State
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  // Create Ledger State - use timezone-aware date
+  const [selectedDate, setSelectedDate] = useState(() => getTodayInTimezone(template?.timezone || 'UTC'));
   const [todayInvoices, setTodayInvoices] = useState<Invoice[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [expenseEntries, setExpenseEntries] = useState<{ name: string; amount: string; description: string; tag: string }[]>([]);
@@ -106,7 +107,7 @@ export default function Ledger({ template }: LedgerProps) {
       ]);
       setAllInvoices(invoices);
       setAllExpenses(expenses);
-      setLedgerEntries(groupLedgerByDate(invoices, expenses));
+      setLedgerEntries(groupLedgerByDate(invoices, expenses, template?.timezone || 'UTC'));
     } catch (err: any) {
       setError(err.message || 'Failed to load ledger data');
     } finally {
@@ -116,6 +117,8 @@ export default function Ledger({ template }: LedgerProps) {
 
   const handleOpenCreatePanel = async (editDate?: string) => {
     const dateToUse = editDate || selectedDate;
+    // Update selectedDate immediately so the panel shows the correct date
+    setSelectedDate(dateToUse);
     setViewMode('create');
     setShowExpenseForm(false);
     setError(null);
