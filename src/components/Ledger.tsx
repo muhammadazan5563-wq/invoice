@@ -832,7 +832,7 @@ export default function Ledger({ template }: LedgerProps) {
             Refresh
           </button>
           <button
-            onClick={handleOpenCreatePanel}
+            onClick={() => handleOpenCreatePanel()}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-200/50 cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" />
