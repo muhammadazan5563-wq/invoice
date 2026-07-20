@@ -49,8 +49,8 @@ export default function Ledger({ template }: LedgerProps) {
   const [viewMode, setViewMode] = useState<'list' | 'detail' | 'create'>('list');
   const [selectedEntry, setSelectedEntry] = useState<LedgerEntry | null>(null);
 
-  // Create Ledger State - Use local date to avoid timezone issues
-  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
+  // Create Ledger State
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todayInvoices, setTodayInvoices] = useState<Invoice[]>([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [expenseEntries, setExpenseEntries] = useState<{ name: string; amount: string; description: string; tag: string }[]>([]);
@@ -66,13 +66,6 @@ export default function Ledger({ template }: LedgerProps) {
   useEffect(() => {
     fetchLedgerData();
   }, []);
-
-  // When switching to create mode, ensure invoices for the selected date are loaded
-  useEffect(() => {
-    if (viewMode === 'create' && selectedDate) {
-      fetchInvoicesForDate(selectedDate);
-    }
-  }, [viewMode, selectedDate]);
 
   // Update currency symbol when template prop changes
   useEffect(() => {
@@ -123,11 +116,9 @@ export default function Ledger({ template }: LedgerProps) {
 
   const handleOpenCreatePanel = async (editDate?: string) => {
     const dateToUse = editDate || selectedDate;
-    setSelectedDate(dateToUse);
     setViewMode('create');
     setShowExpenseForm(false);
     setError(null);
-    setTodayInvoices([]); // Reset first to avoid stale data
 
     // Load existing expenses for this date from the database
     // so they appear in the edit panel (not just in the report view)
@@ -147,11 +138,7 @@ export default function Ledger({ template }: LedgerProps) {
       setExpenseEntries([]);
     }
 
-    // Use setTimeout to ensure state updates have been committed before fetching
-    // This fixes the issue where invoices don't load on initial open
-    setTimeout(async () => {
-      await fetchInvoicesForDate(dateToUse);
-    }, 0);
+    await fetchInvoicesForDate(dateToUse);
   };
 
   const fetchInvoicesForDate = async (date: string) => {
@@ -162,18 +149,12 @@ export default function Ledger({ template }: LedgerProps) {
       // payments made on that specific date (not the full invoice total).
       const matchingInvoices: Invoice[] = [];
 
-      // Normalize the target date for comparison (trim whitespace, ensure YYYY-MM-DD format)
-      const normalizedDate = date.trim();
-
       for (const inv of invoices) {
         const paymentsArray: PaymentRecord[] = inv.payments || [];
 
         if (paymentsArray.length > 0) {
           // Sum only payments whose date matches the selected ledger date
-          const datePayments = paymentsArray.filter((p) => {
-            const payDate = (p.date || '').trim();
-            return payDate === normalizedDate;
-          });
+          const datePayments = paymentsArray.filter((p) => p.date === date);
           if (datePayments.length > 0) {
             const dateTotal = datePayments.reduce((sum, p) => sum + p.amount, 0);
             // Create a copy with totalAmount reflecting only this date's payments
@@ -181,8 +162,7 @@ export default function Ledger({ template }: LedgerProps) {
           }
         } else {
           // Fallback for invoices without a payments array: use legacy paymentDate field
-          const invPaymentDate = (inv.paymentDate || '').trim();
-          if (invPaymentDate === normalizedDate) {
+          if (inv.paymentDate === date) {
             matchingInvoices.push(inv);
           }
         }
@@ -202,9 +182,7 @@ export default function Ledger({ template }: LedgerProps) {
 
   const handleDateChange = async (newDate: string) => {
     setSelectedDate(newDate);
-    setTodayInvoices([]); // Clear stale data immediately
     if (viewMode === 'create') {
-      // Small delay to ensure state is committed before fetching
       await fetchInvoicesForDate(newDate);
     }
   };
@@ -434,7 +412,7 @@ export default function Ledger({ template }: LedgerProps) {
                         <td className="py-4 px-6 text-sm font-semibold text-slate-800">{inv.customerName}</td>
                         <td className="py-4 px-6 text-sm text-slate-600">{inv.hotelName || '—'}</td>
                         <td className="py-4 px-6 text-right">
-                          <span className="text-sm font-bold text-emerald-700">{currencySymbol}{inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <span className="text-sm font-bold text-emerald-700">{currencySymbol}{inv.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                         </td>
                       </tr>
                     ))}
@@ -540,7 +518,7 @@ export default function Ledger({ template }: LedgerProps) {
                       <tr key={idx} className="hover:bg-rose-50/40 transition-colors">
                         <td className="py-4 px-6 text-sm font-semibold text-slate-800">{entry.name}</td>
                         <td className="py-4 px-6 text-right">
-                          <span className="text-sm font-bold text-rose-700">{currencySymbol}{Number(entry.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <span className="text-sm font-bold text-rose-700">{currencySymbol}{Number(entry.amount).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                         </td>
                         <td className="py-4 px-6 text-center">
                           <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${entry.tag === 'cash' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
@@ -578,19 +556,19 @@ export default function Ledger({ template }: LedgerProps) {
               <div className="text-center">
                 <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider block mb-2">Total Amount Received</span>
                 <span className="text-3xl font-black text-emerald-400">
-                  {currencySymbol}{panelTotalReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {currencySymbol}{panelTotalReceived.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
               <div className="text-center">
                 <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider block mb-2">Total Expense</span>
                 <span className="text-3xl font-black text-rose-400">
-                  {currencySymbol}{panelTotalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {currencySymbol}{panelTotalExpense.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
               <div className="text-center">
                 <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider block mb-2">Net Balance</span>
                 <span className={`text-3xl font-black ${(panelTotalReceived - panelTotalExpense) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {currencySymbol}{(panelTotalReceived - panelTotalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {currencySymbol}{(panelTotalReceived - panelTotalExpense).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </span>
               </div>
             </div>
@@ -652,7 +630,7 @@ export default function Ledger({ template }: LedgerProps) {
             <div className="text-right">
               <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider block">Net Balance</span>
               <p className={`text-3xl font-black mt-1 ${(selectedEntry.totalReceived - selectedEntry.totalExpense) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {currencySymbol}{(selectedEntry.totalReceived - selectedEntry.totalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {currencySymbol}{(selectedEntry.totalReceived - selectedEntry.totalExpense).toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </p>
             </div>
           </div>
@@ -664,7 +642,7 @@ export default function Ledger({ template }: LedgerProps) {
                 <span className="text-xs font-bold uppercase tracking-wider">Total Received</span>
               </div>
               <span className="text-2xl font-black text-white">
-                {currencySymbol}{selectedEntry.totalReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {currencySymbol}{selectedEntry.totalReceived.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </span>
             </div>
             <div className="bg-white/10 rounded-xl p-5 backdrop-blur-sm border border-white/10">
@@ -673,7 +651,7 @@ export default function Ledger({ template }: LedgerProps) {
                 <span className="text-xs font-bold uppercase tracking-wider">Total Expense</span>
               </div>
               <span className="text-2xl font-black text-white">
-                {currencySymbol}{selectedEntry.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {currencySymbol}{selectedEntry.totalExpense.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </span>
             </div>
           </div>
@@ -707,7 +685,7 @@ export default function Ledger({ template }: LedgerProps) {
                     <td className="py-3.5 px-6 text-sm font-semibold text-slate-700">{inv.guest_name}</td>
                     <td className="py-3.5 px-6 text-sm text-slate-600">{inv.hotel_name || '—'}</td>
                     <td className="py-3.5 px-6 text-sm font-bold text-emerald-700 text-right">
-                      +{currencySymbol}{inv.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      +{currencySymbol}{inv.total_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
                     <td className="py-3.5 px-6 text-center">
                       <button
@@ -754,7 +732,7 @@ export default function Ledger({ template }: LedgerProps) {
                     </td>
                     <td className="py-3.5 px-6 text-sm text-slate-500">{exp.description || '—'}</td>
                     <td className="py-3.5 px-6 text-sm font-bold text-emerald-700 text-right">
-                      +{currencySymbol}{exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      +{currencySymbol}{exp.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
                     <td className="py-3.5 px-6 text-center">
                       <button
@@ -801,7 +779,7 @@ export default function Ledger({ template }: LedgerProps) {
                     </td>
                     <td className="py-3.5 px-6 text-sm text-slate-500">{exp.description || '—'}</td>
                     <td className="py-3.5 px-6 text-sm font-bold text-rose-700 text-right">
-                      -{currencySymbol}{exp.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      -{currencySymbol}{exp.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
                     <td className="py-3.5 px-6 text-center">
                       <button
@@ -878,7 +856,7 @@ export default function Ledger({ template }: LedgerProps) {
             </div>
           </div>
           <span className="text-3xl font-black text-slate-900">
-            {currencySymbol}{grandTotalReceived.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {currencySymbol}{grandTotalReceived.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </span>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
@@ -889,7 +867,7 @@ export default function Ledger({ template }: LedgerProps) {
             </div>
           </div>
           <span className="text-3xl font-black text-slate-900">
-            {currencySymbol}{grandTotalExpense.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {currencySymbol}{grandTotalExpense.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </span>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
@@ -900,7 +878,7 @@ export default function Ledger({ template }: LedgerProps) {
             </div>
           </div>
           <span className={`text-3xl font-black ${(grandTotalReceived - grandTotalExpense) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-            {currencySymbol}{(grandTotalReceived - grandTotalExpense).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {currencySymbol}{(grandTotalReceived - grandTotalExpense).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </span>
         </div>
       </div>
@@ -956,14 +934,14 @@ export default function Ledger({ template }: LedgerProps) {
                       {entry.invoices.length} invoice{entry.invoices.length !== 1 ? 's' : ''}, {entry.expenses.length} expense{entry.expenses.length !== 1 ? 's' : ''}
                     </td>
                     <td className="py-4 px-6 text-sm font-bold text-emerald-700 text-right">
-                      +{currencySymbol}{entry.totalReceived.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      +{currencySymbol}{entry.totalReceived.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
                     <td className="py-4 px-6 text-sm font-bold text-rose-700 text-right">
-                      -{currencySymbol}{entry.totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      -{currencySymbol}{entry.totalExpense.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </td>
                     <td className="py-4 px-6 text-right">
                       <span className={`text-sm font-black ${(entry.totalReceived - entry.totalExpense) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                        {currencySymbol}{(entry.totalReceived - entry.totalExpense).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {currencySymbol}{(entry.totalReceived - entry.totalExpense).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </span>
                     </td>
                     <td className="py-4 px-6">
