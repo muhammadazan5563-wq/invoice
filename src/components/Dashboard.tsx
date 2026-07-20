@@ -5,9 +5,9 @@ import {
   getInvoices,
   createInvoice,
   updateInvoice,
-  deleteInvoice,
-  syncBookingToSheet
+  deleteInvoice
 } from '../lib/supabase';
+import { syncBookingToSheet } from '../lib/bookingSheet';
 import {
   InvoiceTemplate,
   SpreadsheetSettings,
@@ -156,10 +156,10 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         }
 
         // Sync room booking details to Google Sheets if spreadsheet is configured
-        if (spreadsheetSettings?.spreadsheetId && spreadsheetSettings?.sheetName && token) {
+        const bookingSheet = spreadsheetSettings?.bookingSheetName || spreadsheetSettings?.sheetName;
+        if (spreadsheetSettings?.spreadsheetId && bookingSheet && token) {
           try {
-            const sheetNameForBooking = spreadsheetSettings.sheetName;
-            console.log('[Dashboard] Syncing booking to sheet:', { spreadsheetId: spreadsheetSettings.spreadsheetId, sheetName: sheetNameForBooking, itemCount: invoiceData.items.length });
+            console.log('[Dashboard] Syncing booking to sheet:', { spreadsheetId: spreadsheetSettings.spreadsheetId, sheetName: bookingSheet, itemCount: invoiceData.items.length });
             const syncResult = await syncBookingToSheet(
               invoiceData.id,
               invoiceData.customerName,
@@ -171,7 +171,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 roomType: item.roomType,
               })),
               spreadsheetSettings.spreadsheetId,
-              sheetNameForBooking,
+              bookingSheet,
               token
             );
             console.log('[Dashboard] Booking sync result:', syncResult);
@@ -180,7 +180,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
             setError(`Invoice saved to database, but failed to sync to Google Sheets: ${sheetErr.message}`);
           }
         } else {
-          console.warn('[Dashboard] Skipping sheet sync - missing settings:', { hasSpreadsheetId: !!spreadsheetSettings?.spreadsheetId, hasSheetName: !!spreadsheetSettings?.sheetName, hasToken: !!token });
+          console.warn('[Dashboard] Skipping sheet sync - missing settings:', { hasSpreadsheetId: !!spreadsheetSettings?.spreadsheetId, hasBookingSheet: !!bookingSheet, hasToken: !!token });
         }
 
         await fetchInvoices();
@@ -233,7 +233,8 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         await updateInvoice(invoice.id, updatedInvoice);
 
         // Sync room booking details to Google Sheets if spreadsheet is configured
-        if (spreadsheetSettings?.spreadsheetId && spreadsheetSettings?.sheetName && token) {
+        const bookingSheetForPaid = spreadsheetSettings?.bookingSheetName || spreadsheetSettings?.sheetName;
+        if (spreadsheetSettings?.spreadsheetId && bookingSheetForPaid && token) {
           try {
             await syncBookingToSheet(
               invoice.id,
@@ -246,7 +247,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                 roomType: item.roomType,
               })),
               spreadsheetSettings.spreadsheetId,
-              spreadsheetSettings.sheetName,
+              bookingSheetForPaid,
               token
             );
           } catch (sheetErr: any) {
