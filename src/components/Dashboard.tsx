@@ -39,13 +39,15 @@ interface DashboardProps {
   user: User;
   token: string;
   onLogout: () => Promise<void>;
+  onTokenRefresh?: (newToken: string) => void;
 }
 
-export default function Dashboard({ user, token, onLogout }: DashboardProps) {
+export default function Dashboard({ user, token, onLogout, onTokenRefresh }: DashboardProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [currentToken, setCurrentToken] = useState(token);
 
   const [invoiceTemplate, setInvoiceTemplate] = useState<InvoiceTemplate | null>(null);
 
@@ -806,9 +808,17 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
           <div className="animate-fade-in" id="settings-section">
             <Settings
               user={user}
-              token={token}
+              token={currentToken}
               onClose={() => setViewState('dashboard')}
-              onSettingsSaved={loadTemplateSettings}
+              onSettingsSaved={(newToken?: string) => {
+                if (newToken) {
+                  setCurrentToken(newToken);
+                  if (onTokenRefresh) {
+                    onTokenRefresh(newToken);
+                  }
+                }
+                loadTemplateSettings();
+              }}
             />
           </div>
         )}
