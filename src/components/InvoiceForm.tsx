@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Invoice, BookingItem, PaymentRecord } from '../types';
 import { InvoiceTemplate, getCurrencySymbol } from '../lib/settings';
+import { getTodayInTimezone } from '../lib/timezone';
 import { Plus, Trash2, ArrowLeft, Save, Sparkles, Calendar } from 'lucide-react';
 
 interface InvoiceFormProps {
@@ -61,7 +62,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
       setPayments(initialPayments);
     } else {
       // Create mode - use template defaults from Supabase settings
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTodayInTimezone(template?.timezone || 'UTC');
       setId(suggestInvoiceId || `Z${Math.floor(1 + Math.random() * 99)}`);
       setDate(today);
       setCustomerName('');
@@ -131,7 +132,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
 
   // Handle multi-payment actions
   const handleAddPayment = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayInTimezone(template?.timezone || 'UTC');
     setPayments([...payments, { amount: 0, date: today }]);
   };
 
@@ -179,7 +180,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
   };
 
   const addItemRow = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayInTimezone(template?.timezone || 'UTC');
     setItems([...items, { roomType: 'AVG 4.5', quantity: 1, checkIn: today, checkOut: getNextDayStr(today), nights: 1, price: 50.00, total: 50.00 }]);
   };
 
