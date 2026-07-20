@@ -10,6 +10,8 @@ const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 provider.addScope('https://www.googleapis.com/auth/userinfo.email');
 provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+// Force account selection and consent to always get a fresh OAuth token
+provider.setCustomParameters({ prompt: 'consent' });
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
@@ -45,6 +47,22 @@ function clearPersistedToken() {
   }
 }
 
+// Validate if a token works with Google Sheets API
+async function validateGoogleToken(token: string): Promise<boolean> {
+  try {
+    const response = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=' + encodeURIComponent(token));
+    if (response.ok) {
+      const data = await response.json();
+      // Check if the token has the spreadsheets scope
+      const scopes = data.scope || '';
+      return scopes.includes('spreadsheets');
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // Initialize auth state listener. Call this on app load.
 export const initAuth = (
   onAuthSuccess: (user: User, token: string) => void,
@@ -54,33 +72,32 @@ export const initAuth = (
     if (user) {
       // First check if we have a cached token from the current session
       if (cachedAccessToken) {
-        onAuthSuccess(user, cachedAccessToken);
-        return;
+        // Validate the cached token is still a valid Google OAuth token
+        const isValid = await validateGoogleToken(cachedAccessToken);
+        if (isValid) {
+          onAuthSuccess(user, cachedAccessToken);
+          return;
+        }
+        // Token is invalid/expired, clear it
+        cachedAccessToken = null;
+        clearPersistedToken();
       }
 
       // Try to get persisted token from localStorage
       const persistedToken = getPersistedToken();
       if (persistedToken) {
-        cachedAccessToken = persistedToken;
-        onAuthSuccess(user, persistedToken);
-        return;
-      }
-
-      // If we have a Firebase user but no token, try to get a fresh ID token
-      // This won't give us the Google OAuth access token, but at least keeps the session
-      try {
-        const idToken = await user.getIdToken(true);
-        if (idToken) {
-          cachedAccessToken = idToken;
-          persistToken(idToken);
-          onAuthSuccess(user, idToken);
+        const isValid = await validateGoogleToken(persistedToken);
+        if (isValid) {
+          cachedAccessToken = persistedToken;
+          onAuthSuccess(user, persistedToken);
           return;
         }
-      } catch (e) {
-        console.warn('Failed to refresh token:', e);
+        // Token is expired, clear it
+        clearPersistedToken();
       }
 
-      // If all else fails, require re-login
+      // No valid OAuth token available - user needs to re-authenticate
+      // We'll pass a special marker so the app knows to prompt re-auth
       onAuthFailure();
     } else {
       cachedAccessToken = null;
@@ -108,6 +125,24 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     throw error;
   } finally {
     isSigningIn = false;
+  }
+};
+
+// Re-authenticate to get a fresh Google OAuth2 access token
+// This is needed when the stored token has expired
+export const refreshGoogleToken = async (): Promise<string | null> => {
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) {
+      throw new Error('Failed to get access token');
+    }
+    cachedAccessToken = credential.accessToken;
+    persistToken(credential.accessToken);
+    return credential.accessToken;
+  } catch (error: any) {
+    console.error('Token refresh error:', error);
+    return null;
   }
 };
 
