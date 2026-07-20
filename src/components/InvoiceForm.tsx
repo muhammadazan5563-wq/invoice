@@ -461,7 +461,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
 
                       {/* Total line item amount */}
                       <td className="p-3 text-right font-bold text-slate-800 text-sm pr-4 font-mono">
-                        {currencySymbol}{(item.quantity * item.nights * item.price).toFixed(2)}
+                        {currencySymbol}{(item.quantity * item.nights * item.price).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                       </td>
 
                       {/* Remove action */}
@@ -607,7 +607,7 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
             {/* Total Paid Summary */}
             <div className="flex justify-between items-center text-sm text-slate-600 border-t border-slate-200/60 pt-3">
               <span className="font-bold text-slate-700">Total Amount Paid</span>
-              <span className="font-extrabold text-emerald-600 font-mono text-base">{currencySymbol}{amountPaid.toFixed(2)}</span>
+              <span className="font-extrabold text-emerald-600 font-mono text-base">{currencySymbol}{amountPaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             </div>
 
             {/* Custom Balance Banner */}
@@ -619,8 +619,8 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
               </span>
               <span className="text-lg font-black font-mono">
                 {subtotal - amountPaid < 0 
-                  ? `-${currencySymbol}${Math.abs(subtotal - amountPaid).toFixed(2)}` 
-                  : `${currencySymbol}${(subtotal - amountPaid).toFixed(2)}`}
+                  ? `-${currencySymbol}${Math.abs(subtotal - amountPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}` 
+                  : `${currencySymbol}${(subtotal - amountPaid).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
               </span>
             </div>
           </div>
