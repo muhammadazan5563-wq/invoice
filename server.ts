@@ -239,6 +239,8 @@ app.post("/api/sync-booking-sheet", async (req, res) => {
   try {
     const { invoiceId, customerName, items, spreadsheetId, sheetName, accessToken } = req.body;
 
+    console.log("[sync-booking-sheet] Request received:", { invoiceId, customerName, itemCount: items?.length, spreadsheetId, sheetName, hasToken: !!accessToken });
+
     if (!invoiceId || !customerName || !items || !spreadsheetId || !sheetName || !accessToken) {
       return res.status(400).json({ error: "Missing required fields for sheet sync (invoiceId, customerName, items, spreadsheetId, sheetName, accessToken)" });
     }
@@ -252,22 +254,25 @@ app.post("/api/sync-booking-sheet", async (req, res) => {
       }
     }
 
-    const encodedSheetName = encodeURIComponent(sheetName);
+    // Use the sheet name directly (no encodeURIComponent for the range parameter in the URL path)
+    // Google Sheets API expects the sheet name in single quotes if it contains spaces
+    const sheetRange = `'${sheetName}'!A:H`;
 
     // Step 1: Read existing data to determine the next ID in the series
-    const readResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${cleanSpreadsheetId}/values/'${encodedSheetName}'!A:H`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cleanSpreadsheetId}/values/${encodeURIComponent(sheetRange)}`;
+    console.log("[sync-booking-sheet] Reading sheet:", readUrl);
+    
+    const readResponse = await fetch(readUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
 
     let nextId = 1;
     if (readResponse.ok) {
       const readData = await readResponse.json();
       const existingRows = readData.values || [];
+      console.log("[sync-booking-sheet] Existing rows count:", existingRows.length);
       // Find the highest ID in column D (index 3) - skip header row
       for (let i = 1; i < existingRows.length; i++) {
         const row = existingRows[i];
@@ -278,18 +283,18 @@ app.post("/api/sync-booking-sheet", async (req, res) => {
           }
         }
       }
+    } else {
+      const errBody = await readResponse.text();
+      console.error("[sync-booking-sheet] Failed to read sheet:", readResponse.status, errBody);
+      throw new Error(`Failed to read spreadsheet (${readResponse.status}): ${errBody}`);
     }
 
     // Step 2: First, delete any existing rows for this invoice (REF # column F, index 5)
-    // Read all data to find rows to remove
-    const fullReadResponse = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${cleanSpreadsheetId}/values/'${encodedSheetName}'!A:H`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    const fullReadResponse = await fetch(readUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
 
     if (fullReadResponse.ok) {
       const fullData = await fullReadResponse.json();
@@ -309,6 +314,7 @@ app.post("/api/sync-booking-sheet", async (req, res) => {
         const sheetMeta = await sheetMetaResponse.json();
         const targetSheet = sheetMeta.sheets?.find((s: any) => s.properties?.title === sheetName);
         const sheetId = targetSheet?.properties?.sheetId || 0;
+        console.log("[sync-booking-sheet] Target sheet ID:", sheetId, "for tab:", sheetName);
 
         // Find row indices where REF # (column F, index 5) matches invoiceId
         const rowsToDelete: number[] = [];
@@ -320,6 +326,7 @@ app.post("/api/sync-booking-sheet", async (req, res) => {
 
         // Delete rows in reverse order to maintain correct indices
         if (rowsToDelete.length > 0) {
+          console.log("[sync-booking-sheet] Deleting", rowsToDelete.length, "existing rows for invoice:", invoiceId);
           const deleteRequests = rowsToDelete
             .sort((a, b) => b - a) // Sort descending
             .map((rowIdx) => ({
@@ -346,14 +353,11 @@ app.post("/api/sync-booking-sheet", async (req, res) => {
           );
 
           // After deleting, re-read to get the correct next ID
-          const reReadResponse = await fetch(
-            `https://sheets.googleapis.com/v4/spreadsheets/${cleanSpreadsheetId}/values/'${encodedSheetName}'!A:H`,
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-              },
-            }
-          );
+          const reReadResponse = await fetch(readUrl, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          });
           if (reReadResponse.ok) {
             const reReadData = await reReadResponse.json();
             const remainingRows = reReadData.values || [];
@@ -402,24 +406,30 @@ app.post("/api/sync-booking-sheet", async (req, res) => {
 
     // Step 4: Append the new rows to the sheet
     if (newRows.length > 0) {
-      const appendResponse = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${cleanSpreadsheetId}/values/'${encodedSheetName}'!A1:append?valueInputOption=USER_ENTERED`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            values: newRows,
-          }),
-        }
-      );
+      const appendRange = encodeURIComponent(`'${sheetName}'!A1`);
+      const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cleanSpreadsheetId}/values/${appendRange}:append?valueInputOption=USER_ENTERED`;
+      console.log("[sync-booking-sheet] Appending", newRows.length, "rows to:", appendUrl);
+      console.log("[sync-booking-sheet] Row data:", JSON.stringify(newRows));
+
+      const appendResponse = await fetch(appendUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          values: newRows,
+        }),
+      });
 
       if (!appendResponse.ok) {
         const errorData = await appendResponse.json().catch(() => ({}));
+        console.error("[sync-booking-sheet] Append failed:", appendResponse.status, JSON.stringify(errorData));
         throw new Error(errorData.error?.message || "Failed to append booking rows to Google Sheets");
       }
+
+      const appendResult = await appendResponse.json();
+      console.log("[sync-booking-sheet] Append success:", JSON.stringify(appendResult));
     }
 
     res.json({ success: true, rowsAdded: newRows.length, startId: nextId });
