@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { Invoice } from "../types";
 
-// Client-side environment variables with automatic fallback to user's provided credentials.
+// Client-side environment variables with automatic fallback to user's provided credentials
 const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || "https://jybjzbtgpnhkdyofayji.supabase.co";
 const supabaseKey = (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_FDeECQfWSc89GcQVAUAhyA_QuEfE4AY";
 
@@ -100,4 +100,34 @@ export async function deleteInvoice(id: string): Promise<void> {
   }
 }
 
+// Sync room booking details to Google Sheets
+export async function syncBookingToSheet(
+  invoiceId: string,
+  customerName: string,
+  items: Array<{ checkIn: string; checkOut: string; nights: number; quantity: number; roomType: string }>,
+  spreadsheetId: string,
+  sheetName: string,
+  accessToken: string
+): Promise<{ success: boolean; rowsAdded: number; startId: number }> {
+  const response = await fetch("/api/sync-booking-sheet", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      invoiceId,
+      customerName,
+      items,
+      spreadsheetId,
+      sheetName,
+      accessToken,
+    }),
+  });
 
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to sync booking details to spreadsheet");
+  }
+
+  return response.json();
+}
