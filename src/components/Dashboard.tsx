@@ -13,6 +13,7 @@ import {
   getTemplateWithDefaults,
   getCurrencySymbol
 } from '../lib/settings';
+import { getTodayInTimezone } from '../lib/timezone';
 import Charts from './Charts';
 import InvoiceList from './InvoiceList';
 import InvoiceForm from './InvoiceForm';
@@ -170,6 +171,7 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
   const handleMarkAsPaid = async (invoice: Invoice) => {
     const performMark = async () => {
+      const todayStr = getTodayInTimezone(invoiceTemplate?.timezone || 'UTC');
       const updatedInvoice: Omit<Invoice, 'rowIndex' | 'rawRow'> = {
         id: invoice.id,
         date: invoice.date,
@@ -178,12 +180,12 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
         hotelName: invoice.hotelName,
         totalAmount: invoice.totalAmount,
         amountPaid: invoice.totalAmount,
-        paymentDate: new Date().toISOString().split('T')[0],
+        paymentDate: todayStr,
         balance: 0,
         status: 'Paid',
         notes: invoice.notes,
         items: invoice.items,
-        payments: [{ amount: invoice.totalAmount, date: new Date().toISOString().split('T')[0] }]
+        payments: [{ amount: invoice.totalAmount, date: todayStr }]
       };
 
       setLoadingInvoices(true);
@@ -577,10 +579,27 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
 
                 <div className="flex-1 flex flex-col items-center justify-center py-4">
                   <span className="text-4xl font-black text-gray-900">
-                    {currencySymbol}{invoices
-                      .filter(inv => inv.status === 'Paid' && inv.paymentDate === new Date().toISOString().split('T')[0])
-                      .reduce((sum, inv) => sum + inv.amountPaid, 0)
-                      .toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {currencySymbol}{(() => {
+                      const todayStr = getTodayInTimezone(invoiceTemplate?.timezone || 'UTC');
+                      let todayTotal = 0;
+                      invoices.forEach(inv => {
+                        const paymentsArray = inv.payments || [];
+                        if (paymentsArray.length > 0) {
+                          // Sum all payments made today from the payments array
+                          paymentsArray.forEach(p => {
+                            if (p.date === todayStr) {
+                              todayTotal += p.amount;
+                            }
+                          });
+                        } else {
+                          // Fallback: use legacy paymentDate field
+                          if (inv.paymentDate === todayStr) {
+                            todayTotal += inv.amountPaid;
+                          }
+                        }
+                      });
+                      return todayTotal.toLocaleString(undefined, { maximumFractionDigits: 0 });
+                    })()}
                   </span>
                   <p className="text-sm text-gray-400 mt-2">Collected today</p>
                 </div>
@@ -589,13 +608,22 @@ ALTER TABLE user_settings DISABLE ROW LEVEL SECURITY;`;
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-gray-400">Invoices paid today</span>
                     <span className="font-bold text-gray-700">
-                      {invoices.filter(inv => inv.status === 'Paid' && inv.paymentDate === new Date().toISOString().split('T')[0]).length}
+                      {(() => {
+                        const todayStr = getTodayInTimezone(invoiceTemplate?.timezone || 'UTC');
+                        return invoices.filter(inv => {
+                          const paymentsArray = inv.payments || [];
+                          if (paymentsArray.length > 0) {
+                            return paymentsArray.some(p => p.date === todayStr);
+                          }
+                          return inv.paymentDate === todayStr;
+                        }).length;
+                      })()}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-gray-400">Pending today</span>
                     <span className="font-bold text-gray-700">
-                      {invoices.filter(inv => inv.status === 'Pending' && inv.date === new Date().toISOString().split('T')[0]).length}
+                      {invoices.filter(inv => inv.status === 'Pending' && inv.date === getTodayInTimezone(invoiceTemplate?.timezone || 'UTC')).length}
                     </span>
                   </div>
                 </div>
