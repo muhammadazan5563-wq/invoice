@@ -610,10 +610,12 @@ export default function InvoiceForm({ invoice, onSave, onCancel, suggestInvoiceI
               <span className="font-extrabold text-emerald-600 font-mono text-base">{currencySymbol}{amountPaid.toFixed(2)}</span>
             </div>
 
-            {/* Custom Blue Banner mimicking the screenshot's BALANCE segment */}
-            <div className={`pt-3 border-t border-slate-200 flex justify-between items-center ${subtotal - amountPaid < 0 ? 'bg-emerald-600' : 'bg-blue-600'} text-white p-3 rounded-xl shadow-sm transition-colors duration-200`}>
+            {/* Custom Balance Banner */}
+            <div className={`pt-3 border-t border-slate-200 flex justify-between items-center ${
+              subtotal - amountPaid === 0 ? 'bg-emerald-600' : subtotal - amountPaid < 0 ? 'bg-blue-600' : 'bg-red-600'
+            } text-white p-3 rounded-xl shadow-sm transition-colors duration-200`}>
               <span className="text-xs font-black italic tracking-widest">
-                {subtotal - amountPaid < 0 ? 'CHANGE DUE' : 'BALANCE DUE'}
+                {subtotal - amountPaid < 0 ? 'CHANGE DUE' : subtotal - amountPaid === 0 ? 'PAID IN FULL' : 'BALANCE DUE'}
               </span>
               <span className="text-lg font-black font-mono">
                 {subtotal - amountPaid < 0 
