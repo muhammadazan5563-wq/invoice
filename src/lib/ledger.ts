@@ -122,21 +122,37 @@ export async function deleteCashExpense(id: number): Promise<void> {
   }
 }
 
+// Helper to convert a UTC timestamp to a date string in the given timezone
+function toDateInTimezone(utcDateStr: string, timezone: string = 'UTC'): string {
+  try {
+    const date = new Date(utcDateStr);
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return formatter.format(date);
+  } catch (err) {
+    return new Date(utcDateStr).toISOString().split("T")[0];
+  }
+}
+
 // Group ledger data by date
 // Cash-tagged entries are added to totalReceived, expense-tagged entries are added to totalExpense
-export function groupLedgerByDate(invoices: LedgerInvoice[], expenses: CashExpense[]): LedgerEntry[] {
+export function groupLedgerByDate(invoices: LedgerInvoice[], expenses: CashExpense[], timezone: string = 'UTC'): LedgerEntry[] {
   const dateMap = new Map<string, LedgerEntry>();
 
   // Group invoices by date
   // For composite IDs (format: "invoiceId_YYYY-MM-DD"), extract the date from the ID.
-  // For legacy IDs without a date suffix, fall back to created_at.
+  // For legacy IDs without a date suffix, fall back to created_at converted to user timezone.
   invoices.forEach((inv) => {
     let date: string;
     const dateMatch = inv.id.match(/_(\d{4}-\d{2}-\d{2})$/);
     if (dateMatch) {
       date = dateMatch[1];
     } else {
-      date = new Date(inv.created_at).toISOString().split("T")[0];
+      date = toDateInTimezone(inv.created_at, timezone);
     }
     if (!dateMap.has(date)) {
       dateMap.set(date, { date, invoices: [], expenses: [], totalReceived: 0, totalExpense: 0 });
@@ -146,11 +162,11 @@ export function groupLedgerByDate(invoices: LedgerInvoice[], expenses: CashExpen
     entry.totalReceived += inv.total_amount;
   });
 
-  // Group expenses by date
+  // Group expenses by date (using user timezone for created_at conversion)
   // If tag is "cash", it counts as received (added to totalReceived)
   // If tag is "expense", it counts as expense (added to totalExpense / deducted)
   expenses.forEach((exp) => {
-    const date = new Date(exp.created_at).toISOString().split("T")[0];
+    const date = toDateInTimezone(exp.created_at, timezone);
     if (!dateMap.has(date)) {
       dateMap.set(date, { date, invoices: [], expenses: [], totalReceived: 0, totalExpense: 0 });
     }
